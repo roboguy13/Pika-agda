@@ -108,135 +108,110 @@ data SSL-Expr {C : SSL-Context} {E : Exist-Context} (Γ : Type-Context C) (Δ : 
 [_∣_]⊢_ : ∀ {C : SSL-Context} {E : Exist-Context} (Γ : Type-Context C) (Δ : E-Type-Context E) → SSL-Type → Set
 [ Γ ∣ Δ ]⊢ α = SSL-Expr Γ Δ α
 
--- -- data Type-Of : ∀ {C E} (Γ : Type-Context C) (Δ : E-Type-Context E) → SSL-Expr C E → SSL-Type → Set where
--- --   Type-Of-V-Here : ∀ {C E Γ Δ τ} → Type-Of {S C} {E} (Γ ,, τ) Δ (V Here) τ
--- --   Type-Of-V-There : ∀ {C E Γ Δ τ x} →
--- --     Type-Of {C} {E} Γ Δ (V x) τ →
--- --     Type-Of {S C} {E} (Γ ,, τ) Δ (V (There x)) τ
+----
 
--- --   Type-Of-Exists-V-Here : ∀ {C E Γ Δ τ} → Type-Of {C} {Exist-S E} Γ (Δ ,, τ) (Exists-V EV-Here) τ
--- --   Type-Of-Exists-V-There : ∀ {C E Γ Δ τ x} →
--- --     Type-Of {C} {E} Γ Δ (Exists-V x) τ →
--- --     Type-Of {C} {Exist-S E} Γ (Δ ,, τ) (Exists-V (EV-There x)) τ
+E-ext : ∀ {E E′ : Exist-Context} {Δ : E-Type-Context E} {Δ′ : E-Type-Context E′} →
+  (∀ {α} → Exist-Var Δ α → Exist-Var Δ′ α) →
+  (∀ {α β} → Exist-Var (Δ ,, β) α → Exist-Var (Δ′ ,, β) α)
+E-ext ρ EV-Here = EV-Here
+E-ext ρ (EV-There ev) = EV-There (ρ ev)
 
--- --   Type-Of-Lit : ∀ {C E Γ Δ x α} →
--- --     Type-Of-Val x α →
--- --     Type-Of {C} {E} Γ Δ (Lit x) α
+E-rename : ∀ {C} {E E′ : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Context E} {Δ′ : E-Type-Context E′} →
+  (∀ {α} → Exist-Var Δ α → Exist-Var Δ′ α) →
+  (∀ {α} → SSL-Expr Γ Δ α → SSL-Expr Γ Δ′ α)
+E-rename ρ (V x) = V x
+E-rename ρ (Exists-V x) = Exists-V (ρ x)
+E-rename ρ (Lit x) = Lit x
+E-rename ρ (Add e e₁) = Add (E-rename ρ e) (E-rename ρ e₁)
+E-rename ρ (Sub e e₁) = Sub (E-rename ρ e) (E-rename ρ e₁)
+E-rename ρ (And e e₁) = And (E-rename ρ e) (E-rename ρ e₁)
+E-rename ρ (Not e) = Not (E-rename ρ e)
+E-rename ρ (Equal e e₁) = Equal (E-rename ρ e) (E-rename ρ e₁)
 
--- --   Type-Of-Add : ∀ {C E Γ Δ x y} →
--- --     Type-Of Γ Δ x Int-Type →
--- --     Type-Of Γ Δ y Int-Type →
--- --     Type-Of {C} {E} Γ Δ (Add x y) Int-Type
+E-exts : ∀ {C} {E E′ : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Context E} {Δ′ : E-Type-Context E′} →
+  (∀ {α} → Exist-Var Δ α → SSL-Expr Γ Δ′ α) →
+  (∀ {α β} → Exist-Var (Δ ,, β) α → SSL-Expr Γ (Δ′ ,, β) α)
+E-exts ρ EV-Here = Exists-V EV-Here
+E-exts ρ (EV-There ev) = E-rename EV-There (ρ ev)
 
--- --   Type-Of-Sub : ∀ {C E Δ Γ x y} →
--- --     Type-Of Γ Δ x Int-Type →
--- --     Type-Of Γ Δ y Int-Type →
--- --     Type-Of {C} {E} Γ Δ (Sub x y) Int-Type
+E-subst : ∀ {C} {E E′ : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Context E} {Δ′ : E-Type-Context E′} →
+  (∀ {α} → Exist-Var Δ α → SSL-Expr Γ Δ′ α) →
+  (∀ {α} → SSL-Expr Γ Δ α → SSL-Expr Γ Δ′ α)
+E-subst σ (V x) = V x
+E-subst σ (Exists-V x) = σ x
+E-subst σ (Lit x) = Lit x
+E-subst σ (Add e e₁) = Add (E-subst σ e) (E-subst σ e₁)
+E-subst σ (Sub e e₁) = Sub (E-subst σ e) (E-subst σ e₁)
+E-subst σ (And e e₁) = And (E-subst σ e) (E-subst σ e₁)
+E-subst σ (Not e) = Not (E-subst σ e)
+E-subst σ (Equal e e₁) = Equal (E-subst σ e) (E-subst σ e₁)
 
--- --   Type-Of-And : ∀ {C E Δ Γ x y} →
--- --     Type-Of Γ Δ x Bool-Type →
--- --     Type-Of Γ Δ y Bool-Type →
--- --     Type-Of {C} {E} Γ Δ (And x y) Bool-Type
+E-subst-1 : ∀ {C} {E : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Context E} {α β} →
+  SSL-Expr Γ (Δ ,, β) α →
+  SSL-Expr Γ Δ β →
+  SSL-Expr Γ Δ α
+E-subst-1 {C} {E} {Γ} {Δ} {α} {β} N M = E-subst σ N
+  where
+    σ : ∀ {γ} → Exist-Var (Δ ,, β) γ → SSL-Expr Γ Δ γ
+    σ EV-Here = M
+    σ (EV-There ev) = Exists-V ev
 
--- --   Type-Of-Not : ∀ {C E Δ Γ x} →
--- --     Type-Of Γ Δ x Bool-Type →
--- --     Type-Of {C} {E} Γ Δ (Not x) Bool-Type
+-- E-subst-1-V : ∀ {C} {E : Exist-Context} {x} → {M : SSL-Expr C E} →
+--   E-subst-1 (V x) M ≡ V x
+-- E-subst-1-V {C} {E} {x} {M} = refl
 
--- --   Type-Of-Equal : ∀ {C E Δ Γ x y} →
--- --     Type-Of Γ Δ x Int-Type →
--- --     Type-Of Γ Δ y Int-Type →
--- --     Type-Of {C} {E} Γ Δ (Equal x y) Bool-Type
+----
 
--- -- [_∣_]⊢_∶_ : ∀ {C} {E} → (Γ : Type-Context C) (Δ : E-Type-Context E) → SSL-Expr C E → SSL-Type → Set
--- -- [ Γ ∣ Δ ]⊢ e ∶ α = Type-Of Γ Δ e α
+V-ext : ∀ {C C′ : SSL-Context} {Γ : Type-Context C} {Γ′ : Type-Context C′} →
+  (∀ {α} → SSL-Var Γ α → SSL-Var Γ′ α) →
+  (∀ {α β} → SSL-Var (Γ ,, β) α → SSL-Var (Γ′ ,, β) α)
+V-ext ρ Here = Here
+V-ext ρ (There ev) = There (ρ ev)
 
--- -- Typed-Expr : ∀ {C} {E} → (Γ : Type-Context C) (Δ : E-Type-Context E) → SSL-Type → Set
--- -- Typed-Expr {C} {E} Γ Δ α = Σ (SSL-Expr C E) λ e → [ Γ ∣ Δ ]⊢ e ∶ α
+V-rename : ∀ {C C′} {E} {Γ : Type-Context C} {Γ′ : Type-Context C′} {Δ : E-Type-Context E} →
+  (∀ {α} → SSL-Var Γ α → SSL-Var Γ′ α) →
+  (∀ {α} → SSL-Expr Γ Δ α → SSL-Expr Γ′ Δ α)
+V-rename ρ (V x) = V (ρ x)
+V-rename ρ (Exists-V x) = Exists-V x
+V-rename ρ (Lit x) = Lit x
+V-rename ρ (Add e e₁) = Add (V-rename ρ e) (V-rename ρ e₁)
+V-rename ρ (Sub e e₁) = Sub (V-rename ρ e) (V-rename ρ e₁)
+V-rename ρ (And e e₁) = And (V-rename ρ e) (V-rename ρ e₁)
+V-rename ρ (Not e) = Not (V-rename ρ e)
+V-rename ρ (Equal e e₁) = Equal (V-rename ρ e) (V-rename ρ e₁)
 
--- -- ----
+V-exts : ∀ {C C′} {E} {Γ : Type-Context C} {Γ′ : Type-Context C′} {Δ : E-Type-Context E} →
+  (∀ {α} → SSL-Var Γ α → SSL-Expr Γ′ Δ α) →
+  (∀ {α β} → SSL-Var (Γ ,, β) α → SSL-Expr (Γ′ ,, β) Δ α)
+V-exts ρ Here = V Here
+V-exts ρ (There ev) = V-rename There (ρ ev)
 
--- -- E-ext : {E E′ : Exist-Context} → (Exist-Var E → Exist-Var E′) → (Exist-Var (Exist-S E) → Exist-Var (Exist-S E′))
--- -- E-ext ρ EV-Here = EV-Here
--- -- E-ext ρ (EV-There ev) = EV-There (ρ ev)
-
--- -- E-rename : ∀ {C} {E E′ : Exist-Context} → (Exist-Var E → Exist-Var E′) → (SSL-Expr C E → SSL-Expr C E′)
--- -- E-rename ρ (V x) = V x
--- -- E-rename ρ (Exists-V x) = Exists-V (ρ x)
--- -- -- E-rename ρ (Exists-Intro e) = E-rename (λ _ → EV-Here) e
--- -- E-rename ρ (Lit x) = Lit x
--- -- E-rename ρ (Add e e₁) = Add (E-rename ρ e) (E-rename ρ e₁)
--- -- E-rename ρ (Sub e e₁) = Sub (E-rename ρ e) (E-rename ρ e₁)
--- -- E-rename ρ (And e e₁) = And (E-rename ρ e) (E-rename ρ e₁)
--- -- E-rename ρ (Not e) = Not (E-rename ρ e)
--- -- E-rename ρ (Equal e e₁) = Equal (E-rename ρ e) (E-rename ρ e₁)
-
--- -- E-exts : ∀ {C} {E E′ : Exist-Context} → (Exist-Var E → SSL-Expr C E′) → (Exist-Var (Exist-S E) → SSL-Expr C (Exist-S E′))
--- -- E-exts ρ EV-Here = Exists-V EV-Here
--- -- E-exts ρ (EV-There ev) = E-rename EV-There (ρ ev)
-
--- -- E-subst : ∀ {C} {E E′ : Exist-Context} → (Exist-Var E → SSL-Expr C E′) → (SSL-Expr C E → SSL-Expr C E′)
--- -- E-subst σ (V x) = V x
--- -- E-subst σ (Exists-V x) = σ x
--- -- -- E-subst σ (Exists-Intro e) = Exists-Intro (E-subst (E-exts σ) e)
--- -- E-subst σ (Lit x) = Lit x
--- -- E-subst σ (Add e e₁) = Add (E-subst σ e) (E-subst σ e₁)
--- -- E-subst σ (Sub e e₁) = Sub (E-subst σ e) (E-subst σ e₁)
--- -- E-subst σ (And e e₁) = And (E-subst σ e) (E-subst σ e₁)
--- -- E-subst σ (Not e) = Not (E-subst σ e)
--- -- E-subst σ (Equal e e₁) = Equal (E-subst σ e) (E-subst σ e₁)
-
--- -- E-subst-1 : ∀ {C} {E : Exist-Context} → SSL-Expr C (Exist-S E) → SSL-Expr C E → SSL-Expr C E
--- -- E-subst-1 {A} {E} N M = E-subst σ N
--- --   where
--- --     σ : Exist-Var (Exist-S E) → SSL-Expr A E
--- --     σ EV-Here = M
--- --     σ (EV-There ev) = Exists-V ev
-
--- -- E-subst-1-V : ∀ {C} {E : Exist-Context} {x} → {M : SSL-Expr C E} →
--- --   E-subst-1 (V x) M ≡ V x
--- -- E-subst-1-V {C} {E} {x} {M} = refl
-
--- -- ----
-
--- -- V-ext : {C C′ : SSL-Context} → (SSL-Var C → SSL-Var C′) → (SSL-Var (S C) → SSL-Var (S C′))
--- -- V-ext ρ Here = Here
--- -- V-ext ρ (There ev) = There (ρ ev)
-
--- -- V-rename : ∀ {C C′} {E : Exist-Context} → (SSL-Var C → SSL-Var C′) → (SSL-Expr C E → SSL-Expr C′ E)
--- -- V-rename ρ (V x) = V (ρ x)
--- -- V-rename ρ (Exists-V x) = Exists-V x
--- -- V-rename ρ (Lit x) = Lit x
--- -- V-rename ρ (Add e e₁) = Add (V-rename ρ e) (V-rename ρ e₁)
--- -- V-rename ρ (Sub e e₁) = Sub (V-rename ρ e) (V-rename ρ e₁)
--- -- V-rename ρ (And e e₁) = And (V-rename ρ e) (V-rename ρ e₁)
--- -- V-rename ρ (Not e) = Not (V-rename ρ e)
--- -- V-rename ρ (Equal e e₁) = Equal (V-rename ρ e) (V-rename ρ e₁)
-
--- -- V-exts : ∀ {C C′} {E : Exist-Context} → (SSL-Var C → SSL-Expr C′ E) → (SSL-Var (S C) → SSL-Expr (S C′) E)
--- -- V-exts ρ Here = V Here
--- -- V-exts ρ (There ev) = V-rename There (ρ ev)
-
--- -- V-subst : ∀ {C C′} {E : Exist-Context} → (SSL-Var C → SSL-Expr C′ E) → (SSL-Expr C E → SSL-Expr C′ E)
--- -- V-subst σ (V x) = σ x
--- -- V-subst σ (Exists-V x) = Exists-V x
--- -- V-subst σ (Lit x) = Lit x
--- -- V-subst σ (Add e e₁) = Add (V-subst σ e) (V-subst σ e₁)
--- -- V-subst σ (Sub e e₁) = Sub (V-subst σ e) (V-subst σ e₁)
--- -- V-subst σ (And e e₁) = And (V-subst σ e) (V-subst σ e₁)
--- -- V-subst σ (Not e) = Not (V-subst σ e)
--- -- V-subst σ (Equal e e₁) = Equal (V-subst σ e) (V-subst σ e₁)
+V-subst : ∀ {C C′} {E} {Γ : Type-Context C} {Γ′ : Type-Context C′} {Δ : E-Type-Context E} →
+  (∀ {α} → SSL-Var Γ α → SSL-Expr Γ′ Δ α) →
+  (∀ {α} → SSL-Expr Γ Δ α → SSL-Expr Γ′ Δ α)
+V-subst σ (V x) = σ x
+V-subst σ (Exists-V x) = Exists-V x
+V-subst σ (Lit x) = Lit x
+V-subst σ (Add e e₁) = Add (V-subst σ e) (V-subst σ e₁)
+V-subst σ (Sub e e₁) = Sub (V-subst σ e) (V-subst σ e₁)
+V-subst σ (And e e₁) = And (V-subst σ e) (V-subst σ e₁)
+V-subst σ (Not e) = Not (V-subst σ e)
+V-subst σ (Equal e e₁) = Equal (V-subst σ e) (V-subst σ e₁)
 
 -- -- V-subst-Exists-V : ∀ {C C′} {E : Exist-Context} {x} →
 -- --   (σ : SSL-Var C → SSL-Expr C′ E) →
 -- --   V-subst σ (Exists-V x) ≡ Exists-V x
 -- -- V-subst-Exists-V σ = refl
 
--- -- -- V-subst-1 : ∀ {C} {E : Exist-Context} → SSL-Expr (S C) E → SSL-Expr C E → SSL-Expr C E
--- -- -- V-subst-1 {C} {E} N M = V-subst σ N
--- -- --   where
--- -- --     σ : SSL-Var (S C) → SSL-Expr C E
--- -- --     σ Here = M
--- -- --     σ (There v) = V v
+V-subst-1 : ∀ {C} {E : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Context E} {α β} →
+  SSL-Expr (Γ ,, β) Δ α →
+  SSL-Expr Γ Δ β →
+  SSL-Expr Γ Δ α
+V-subst-1 {C} {E} {Γ} {Δ} {α} {β} N M = V-subst σ N
+  where
+    σ : ∀ {γ} → SSL-Var (Γ ,, β) γ → SSL-Expr Γ Δ γ
+    σ Here = M
+    σ (There v) = V v
 
 -- -- -- V-subst-1-Exists-V : ∀ {C} {E : Exist-Context} {x} → {M : SSL-Expr C E} →
 -- -- --   V-subst-1 (Exists-V x) M ≡ Exists-V x
