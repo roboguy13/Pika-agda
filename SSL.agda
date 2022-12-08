@@ -33,14 +33,14 @@ get-Pred-Name = proj₁
 Pred-Name-label : Labeled-Pred-Name → Pred-Label
 Pred-Name-label = proj₂
 
-record Loc : Set where
-  field
-    name : Loc-Name
-    ix : ℕ
+-- record Loc : Set where
+--   field
+--     name : Loc-Name
+--     ix : ℕ
 
-ix-Loc : Loc → ℕ → Loc
-ix-Loc record { name = name ; ix = ix } ix-incr =
-  record { name = name ; ix = ix Data.Nat.+ ix-incr }
+data Loc : Set where
+  Null : Loc
+  mk-Loc : Loc-Name → ℕ → Loc
 
 -- | Program variable (store) context
 data SSL-Context : Set where
@@ -60,11 +60,6 @@ data Val : SSL-Type → Set where
   Val-Loc : Loc → Val Loc-Type
   Val-Int : ℤ → Val Int-Type
   Val-Bool : Bool → Val Bool-Type
-
-ix-Val : ∀ {α} → Val α → ℕ → Val α
-ix-Val (Val-Loc x) ix = Val-Loc (ix-Loc x ix)
-ix-Val (Val-Int x) ix = Val-Int x
-ix-Val (Val-Bool x) ix = Val-Bool x
 
 data Exist-Context : Set where
   Exist-Z : Exist-Context

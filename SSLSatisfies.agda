@@ -72,18 +72,6 @@ Ind-Pred-Env Γ Δ = (n : Pred-Name) → Ind-Pred Γ Δ n
 Ind-Pred-Denotation : ∀ {C} → Type-Context C → Set₁
 Ind-Pred-Denotation Γ = Heap → Val-Vec Γ ε Γ → Set
 
--- close-denotation′ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → (Heap → Val-Vec Γ Δ Γ → Set) → Ind-Pred-Denotation₀ Γ
--- close-denotation′ {_} {.Exist-Z} {Γ} {ε} f = f
--- close-denotation′ {_} {.(Exist-S _)} {Γ} {Δ ,, x} f =
---   let
---     g : Heap → Val-Vec Γ Δ Γ → Set
---     g h v = f {!!} {!!}
---   in
---   {!!}
-
--- close-denotation : ∀ {C} {Γ : Type-Context C} → Ind-Pred-Denotation Γ → Ind-Pred-Denotation₀ Γ
--- close-denotation = {!!}
-
 Ind-Pred-Interpret : ∀ {C} → Type-Context C → Set₁
 Ind-Pred-Interpret Γ =
   (n : Pred-Name) →
