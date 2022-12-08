@@ -25,6 +25,10 @@ data Pred-Label : Set where
 β : Pred-Label
 β = Pred-Label-S Pred-Label-Z
 
+ρ : Pred-Label → ℕ
+ρ Pred-Label-Z = 0
+ρ _ = 1
+
 data Loc-Name : Set where
   Loc-X : Loc-Name
   Loc-Y : Loc-Name
@@ -69,7 +73,7 @@ sll =
     ; assertion = record
                     { pure = Not (Equal (V Here) (Lit (Val-Loc Null)))
                     ; spatial =
-                      Points-To (Lit (Val-Loc (mk-Loc Loc-X 0))) (Exists-V EV-Here)  -- x :-> v
+                      Points-To (V Here) (Exists-V EV-Here)  -- x :-> v
                       ∷
                       Points-To (Lit (Val-Loc (mk-Loc Loc-X 1))) (Exists-V (EV-There EV-Here)) -- (x+1) :-> nxt
                       ∷
@@ -79,3 +83,10 @@ sll =
     }
   ∷
   []
+
+store : Store sll-Γ
+store Here = Val-Loc (mk-Loc Loc-X 0)
+
+sll-test-1 :
+  ρ , {!!} , {!!} ⊨[ {!!} ] {!!}
+sll-test-1 = {!!}

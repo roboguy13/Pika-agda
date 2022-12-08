@@ -42,6 +42,10 @@ data Loc : Set where
   Null : Loc
   mk-Loc : Loc-Name → ℕ → Loc
 
+Loc-incr : Loc → ℕ → Loc
+Loc-incr Null i = Null
+Loc-incr (mk-Loc x x₁) i = mk-Loc x (x₁ Data.Nat.+ i)
+
 -- | Program variable (store) context
 data SSL-Context : Set where
   Z : SSL-Context
@@ -95,6 +99,7 @@ data SSL-Expr {C : SSL-Context} {E : Exist-Context} (Γ : Type-Context C) (Δ : 
   -- Loc-Lit : Loc → SSL-Expr C E
   Lit : ∀ {α} → Val α → SSL-Expr Γ Δ α
   Add : SSL-Expr Γ Δ Int-Type → SSL-Expr Γ Δ Int-Type → SSL-Expr Γ Δ Int-Type
+  Loc-Ix : SSL-Expr Γ Δ Loc-Type → ℕ → SSL-Expr Γ Δ Loc-Type
   Sub : SSL-Expr Γ Δ Int-Type → SSL-Expr Γ Δ Int-Type → SSL-Expr Γ Δ Int-Type
   And : SSL-Expr Γ Δ Bool-Type → SSL-Expr Γ Δ Bool-Type → SSL-Expr Γ Δ Bool-Type
   Not : SSL-Expr Γ Δ Bool-Type → SSL-Expr Γ Δ Bool-Type
@@ -118,6 +123,7 @@ E-rename ρ (V x) = V x
 E-rename ρ (Exists-V x) = Exists-V (ρ x)
 E-rename ρ (Lit x) = Lit x
 E-rename ρ (Add e e₁) = Add (E-rename ρ e) (E-rename ρ e₁)
+E-rename ρ (Loc-Ix loc i) = Loc-Ix (E-rename ρ loc) i
 E-rename ρ (Sub e e₁) = Sub (E-rename ρ e) (E-rename ρ e₁)
 E-rename ρ (And e e₁) = And (E-rename ρ e) (E-rename ρ e₁)
 E-rename ρ (Not e) = Not (E-rename ρ e)
@@ -136,6 +142,7 @@ E-subst σ (V x) = V x
 E-subst σ (Exists-V x) = σ x
 E-subst σ (Lit x) = Lit x
 E-subst σ (Add e e₁) = Add (E-subst σ e) (E-subst σ e₁)
+E-subst σ (Loc-Ix loc i) = Loc-Ix (E-subst σ loc) i
 E-subst σ (Sub e e₁) = Sub (E-subst σ e) (E-subst σ e₁)
 E-subst σ (And e e₁) = And (E-subst σ e) (E-subst σ e₁)
 E-subst σ (Not e) = Not (E-subst σ e)
@@ -170,6 +177,7 @@ V-rename ρ (V x) = V (ρ x)
 V-rename ρ (Exists-V x) = Exists-V x
 V-rename ρ (Lit x) = Lit x
 V-rename ρ (Add e e₁) = Add (V-rename ρ e) (V-rename ρ e₁)
+V-rename ρ (Loc-Ix loc i) = Loc-Ix (V-rename ρ loc) i
 V-rename ρ (Sub e e₁) = Sub (V-rename ρ e) (V-rename ρ e₁)
 V-rename ρ (And e e₁) = And (V-rename ρ e) (V-rename ρ e₁)
 V-rename ρ (Not e) = Not (V-rename ρ e)
@@ -188,6 +196,7 @@ V-subst σ (V x) = σ x
 V-subst σ (Exists-V x) = Exists-V x
 V-subst σ (Lit x) = Lit x
 V-subst σ (Add e e₁) = Add (V-subst σ e) (V-subst σ e₁)
+V-subst σ (Loc-Ix loc i) = Loc-Ix (V-subst σ loc) i
 V-subst σ (Sub e e₁) = Sub (V-subst σ e) (V-subst σ e₁)
 V-subst σ (And e e₁) = And (V-subst σ e) (V-subst σ e₁)
 V-subst σ (Not e) = Not (V-subst σ e)
@@ -303,6 +312,10 @@ module Ambient-Context
       SSL-Expr-Val-⇓ store y (Val-Int y-val) →
       SSL-Expr-Val-⇓ store (Add x y) (Val-Int (x-val + y-val))
 
+    SSL-Expr-Val-⇓-Loc-Ix : ∀ {x x-val i} →
+      SSL-Expr-Val-⇓ store x (Val-Loc x-val) →
+      SSL-Expr-Val-⇓ store (Loc-Ix x i) (Val-Loc (Loc-incr x-val i))
+
     SSL-Expr-Val-⇓-Sub : ∀ {x y x-val y-val} →
       SSL-Expr-Val-⇓ store x (Val-Int x-val) →
       SSL-Expr-Val-⇓ store y (Val-Int y-val) →
@@ -317,15 +330,15 @@ module Ambient-Context
       SSL-Expr-Val-⇓ store x (Val-Bool x-val) →
       SSL-Expr-Val-⇓ store (Not x) (Val-Bool (not x-val))
 
-    SSL-Expr-Val-⇓-Equal-true : ∀ {x y x-val y-val} →
-      SSL-Expr-Val-⇓ store x (Val-Int x-val) →
-      SSL-Expr-Val-⇓ store y (Val-Int y-val) →
+    SSL-Expr-Val-⇓-Equal-true : ∀ {α x y x-val y-val} →
+      SSL-Expr-Val-⇓ store {α} x x-val →
+      SSL-Expr-Val-⇓ store y y-val →
       x-val ≡ y-val →
       SSL-Expr-Val-⇓ store (Equal x y) (Val-Bool true)
 
-    SSL-Expr-Val-⇓-Equal-false : ∀ {x y x-val y-val} →
-      SSL-Expr-Val-⇓ store x (Val-Int x-val) →
-      SSL-Expr-Val-⇓ store y (Val-Int y-val) →
+    SSL-Expr-Val-⇓-Equal-false : ∀ {α x y x-val y-val} →
+      SSL-Expr-Val-⇓ store {α} x x-val →
+      SSL-Expr-Val-⇓ store y y-val →
       x-val ≢ y-val →
       SSL-Expr-Val-⇓ store (Equal x y) (Val-Bool false)
 

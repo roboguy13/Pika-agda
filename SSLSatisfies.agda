@@ -16,11 +16,83 @@ module SSLSatisfies
   (Pred-Name : Set)
   (Pred-Label : Set)
   (Loc-Name : Set)
+  (Loc-Name-eq-dec : ∀ (x y : Loc-Name) → (x ≡ y) ⊎ (x ≢ y))
   where
 
 open import SSL (Pred-Name) (Pred-Label) (Loc-Name)
 
 open Ambient-Context
+
+ℕ-eq-dec : ∀ (x y : ℕ) → (x ≡ y) ⊎ (x ≢ y)
+ℕ-eq-dec zero zero = inj₁ refl
+ℕ-eq-dec zero (ℕ.suc y) = inj₂ (λ ())
+ℕ-eq-dec (ℕ.suc x) zero = inj₂ (λ ())
+ℕ-eq-dec (ℕ.suc x) (ℕ.suc y) with ℕ-eq-dec x y
+... | inj₁ x₁ = inj₁ (cong ℕ.suc x₁)
+... | inj₂ y₁ = inj₂ λ { _≡_.refl → y₁ refl }
+
+Loc-eq-dec : ∀ (x y : Loc) → (x ≡ y) ⊎ (x ≢ y)
+Loc-eq-dec Null Null = inj₁ refl
+Loc-eq-dec Null (mk-Loc x x₁) = inj₂ (λ ())
+Loc-eq-dec (mk-Loc x x₁) Null = inj₂ (λ ())
+Loc-eq-dec (mk-Loc x x₁) (mk-Loc x₂ x₃) with ℕ-eq-dec x₁ x₃
+... | inj₂ y = inj₂ λ { _≡_.refl → y refl }
+... | inj₁ x₄ with Loc-Name-eq-dec x x₂
+Loc-eq-dec (mk-Loc x x₁) (mk-Loc x₂ x₃) | inj₁ refl | inj₁ refl = inj₁ refl
+Loc-eq-dec (mk-Loc x x₁) (mk-Loc x₂ x₃) | inj₁ x₄ | inj₂ w =
+  inj₂ λ { _≡_.refl → w refl }
+
+Bool-eq-dec : ∀ (x y : Bool) → (x ≡ y) ⊎ (x ≢ y)
+Bool-eq-dec false false = inj₁ refl
+Bool-eq-dec false true = inj₂ (λ ())
+Bool-eq-dec true false = inj₂ (λ ())
+Bool-eq-dec true true = inj₁ refl
+
+ℤ-eq-dec : ∀ (x y : ℤ) → (x ≡ y) ⊎ (x ≢ y)
+ℤ-eq-dec (+_ n) (+_ n₁) with ℕ-eq-dec n n₁
+... | inj₁ refl = inj₁ refl
+... | inj₂ y = inj₂ λ { _≡_.refl → y refl }
+ℤ-eq-dec (+_ n) (-[1+_] n₁) = inj₂ (λ ())
+ℤ-eq-dec (-[1+_] n) (+_ n₁) = inj₂ (λ ())
+ℤ-eq-dec (-[1+_] n) (-[1+_] n₁) with ℕ-eq-dec n n₁
+... | inj₁ refl = inj₁ refl
+... | inj₂ y = inj₂ λ { _≡_.refl → y refl }
+
+truncate : ∀ {ℓ} {A : Set ℓ} {x y : A} → (x ≡ y) ⊎ (x ≢ y) → Bool
+truncate (inj₁ x) = true
+truncate (inj₂ y) = false
+
+
+eval : ∀ {C} {Γ : Type-Context C} (store : Store Γ) {α} → (e : SSL-Expr Γ ε α) →
+  ∃[ v ] (SSL-Expr-Val-⇓ Γ ε store e v)
+eval store (V x) = store x , SSL-Expr-Val-⇓-V
+eval store (Exists-V ())
+eval store (Lit x) = x , SSL-Expr-Val-⇓-Lit
+eval store (Add e e₁) with eval store e | eval store e₁
+... | Val-Int x , prf-x | Val-Int y , prf-y = Val-Int (x + y) , SSL-Expr-Val-⇓-Add prf-x prf-y
+eval store (Loc-Ix e i) with eval store e
+... | Val-Loc loc , prf-loc = Val-Loc (Loc-incr loc i) , SSL-Expr-Val-⇓-Loc-Ix prf-loc
+eval store (Sub e e₁) with eval store e | eval store e₁
+... | Val-Int x , prf-x | Val-Int y , prf-y = Val-Int (x - y) , SSL-Expr-Val-⇓-Sub prf-x prf-y
+eval store (And e e₁) with eval store e | eval store e₁
+... | Val-Bool x , prf-x | Val-Bool y , prf-y = Val-Bool (x ∧ y) , SSL-Expr-Val-⇓-And prf-x prf-y
+eval store (Not e) = {!!}
+eval store (Equal e e₁) with eval store e | eval store e₁
+eval store (Equal e e₁) | Val-Loc x , prf-x | Val-Loc x₁ , prf-y with Loc-eq-dec x x₁
+eval store (Equal e e₁) | Val-Loc x , prf-x | Val-Loc x₁ , prf-y | inj₁ refl = Val-Bool true , SSL-Expr-Val-⇓-Equal-true prf-x prf-y refl
+eval store (Equal e e₁) | Val-Loc x , prf-x | Val-Loc x₁ , prf-y | inj₂ w =
+  Val-Bool false , SSL-Expr-Val-⇓-Equal-false prf-x prf-y λ { _≡_.refl → w refl }
+
+eval store (Equal e e₁) | Val-Int x , prf-x | Val-Int x₁ , prf-y with ℤ-eq-dec x x₁
+eval store (Equal e e₁) | Val-Int x , prf-x | Val-Int x₁ , prf-y | inj₁ refl = Val-Bool true , SSL-Expr-Val-⇓-Equal-true prf-x prf-y refl
+eval store (Equal e e₁) | Val-Int x , prf-x | Val-Int x₁ , prf-y | inj₂ w =
+  Val-Bool false , SSL-Expr-Val-⇓-Equal-false prf-x prf-y λ { _≡_.refl → w refl }
+
+eval store (Equal e e₁) | Val-Bool x , prf-x | Val-Bool x₁ , prf-y with Bool-eq-dec x x₁
+eval store (Equal e e₁) | Val-Bool x , prf-x | Val-Bool x₁ , prf-y | inj₁ refl = Val-Bool true , SSL-Expr-Val-⇓-Equal-true prf-x prf-y refl
+eval store (Equal e e₁) | Val-Bool x , prf-x | Val-Bool x₁ , prf-y | inj₂ w =
+  Val-Bool false , SSL-Expr-Val-⇓-Equal-false prf-x prf-y λ { _≡_.refl → w refl }
+
 
 Satisfies-Expr₀ : ∀ {C : SSL-Context} {Γ : Type-Context C} (s : Store Γ) → (e : SSL-Expr Γ ε Bool-Type) → Set
 Satisfies-Expr₀ s (V x) with s x
@@ -30,7 +102,8 @@ Satisfies-Expr₀ s (Lit (Val-Bool true)) = ⊤
 Satisfies-Expr₀ s (Lit (Val-Bool false)) = ⊥
 Satisfies-Expr₀ s (And x y) = (Satisfies-Expr₀ s x) × (Satisfies-Expr₀ s y)
 Satisfies-Expr₀ s (Not x) = ¬ (Satisfies-Expr₀ s x)
-Satisfies-Expr₀ s (Equal x y) = x ≡ y
+Satisfies-Expr₀ s (Equal x y) with eval s x | eval s y
+... | a , _ | b , _ = a ≡ b
 
 Satisfies-Expr : ∀ {C : SSL-Context} {E : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Context E} (s : Store Γ) → (e : SSL-Expr Γ Δ Bool-Type) → Set
 Satisfies-Expr {_} {Exist-Z} {_} {ε} s e = Satisfies-Expr₀ s e
