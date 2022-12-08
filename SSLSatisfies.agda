@@ -70,10 +70,7 @@ Ind-Pred-Env : ∀ {C E} → Type-Context C → E-Type-Context E → Set
 Ind-Pred-Env Γ Δ = (n : Pred-Name) → Ind-Pred Γ Δ n
 
 Ind-Pred-Denotation : ∀ {C} → Type-Context C → Set₁
-Ind-Pred-Denotation Γ = ∃[ E ] Σ (E-Type-Context E) λ Δ → Heap → Val-Vec Γ Δ Γ → Set
-
-Ind-Pred-Denotation₀ : ∀ {C} → Type-Context C → Set₁
-Ind-Pred-Denotation₀ Γ = Heap → Val-Vec Γ ε Γ → Set
+Ind-Pred-Denotation Γ = Heap → Val-Vec Γ ε Γ → Set
 
 -- close-denotation′ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → (Heap → Val-Vec Γ Δ Γ → Set) → Ind-Pred-Denotation₀ Γ
 -- close-denotation′ {_} {.Exist-Z} {Γ} {ε} f = f
@@ -107,7 +104,7 @@ data Satisfies-Heaplet₀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} : 
 
   Satisfies-Heaplet₀-· : ∀ {s : Store Γ} {h} {env} {labeled-p-name p-name args} {args-vals} →
     p-name ≡ get-Pred-Name labeled-p-name →
-    proj₂ (proj₂ (env p-name)) h (Val-Vec-any-Δ args-vals) →
+    env p-name h (Val-Vec-any-Δ args-vals) →
     SSL-Expr-⇓-Vec Γ Δ s args args-vals →
     Satisfies-Heaplet₀ s h env (labeled-p-name · args)
 
@@ -138,7 +135,7 @@ record Satisfies-Assertion₀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E
     spatial-prf : Satisfies-spatial₀ s h env (Assertion.spatial a)
 
 φ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → Store Γ → List (Ind-Rule Γ Δ) → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ
-φ {C} {E} {Γ} {Δ} store rules env P = E , Δ , λ H vec →
+φ {C} {E} {Γ} {Δ} store rules env P H vec =
   ∃[ F ] (Satisfies-Assertion₀ {_} {E} store H env F × (record { name = P ; assertion = F } ∈ rules))
 
 _⊆_ : ∀ {ℓ m} {A : Set ℓ} (P Q : A → Set m) → Set (ℓ Agda.Primitive.⊔ m)
@@ -147,114 +144,113 @@ _⊆_ P Q = ∀ a → P a → Q a
 _⊆₂_ : ∀ {ℓ m} {A B : Set ℓ} (P Q : A → B → Set m) → Set (ℓ Agda.Primitive.⊔ m)
 _⊆₂_ P Q = ∀ a b → P a b → Q a b
 
--- _≤′_ : ∀ {Γ} → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ → Set
--- _≤′_ X X′ = ∀ P → proj₂ (proj₂ (X P)) ⊆₂ proj₂ (proj₂ (X′ P))
+_≤′_ : ∀ {C} {Γ : Type-Context C} → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ → Set
+_≤′_ X X′ = ∀ P → X P ⊆₂ X′ P
 
--- _⊔_ : ∀ {Γ} → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ
--- _⊔_ {Γ} env-1 env-2 = λ n x y → env-1 n x y ⊎ env-2 n x y
+_⊔_ : ∀ {C} {Γ : Type-Context C} → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ
+_⊔_ {Γ} env-1 env-2 = λ n x y → env-1 n x y ⊎ env-2 n x y
 
--- -- -- -- -- -- -- -- _⊓_ : ∀ {Γ} → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ
--- -- -- -- -- -- -- -- _⊓_ {Γ} env-1 env-2 = λ n x y → env-1 n x y × env-2 n x y
+_⊓_ : ∀ {C} {Γ : Type-Context C} → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ → Ind-Pred-Interpret Γ
+_⊓_ {Γ} env-1 env-2 = λ n x y → env-1 n x y × env-2 n x y
 
--- -- -- -- -- -- -- -- ∅-interpret : ∀ {Γ} → Ind-Pred-Interpret Γ
--- -- -- -- -- -- -- -- ∅-interpret = λ n h args → ⊥
+∅-interpret : ∀ {C} {Γ : Type-Context C} → Ind-Pred-Interpret Γ
+∅-interpret = λ n h args → ⊥
 
--- -- -- -- -- -- -- -- ∅-interpret-least : ∀ {Γ} → (X : Ind-Pred-Interpret Γ) → ∅-interpret ≤′ X
--- -- -- -- -- -- -- -- ∅-interpret-least X P a b ()
+∅-interpret-least : ∀ {C} {Γ : Type-Context C} → (X : Ind-Pred-Interpret Γ) → ∅-interpret ≤′ X
+∅-interpret-least X P a b ()
 
--- -- -- -- -- -- -- -- Satisfies-Heaplet₀-monotone : ∀ {E} {Γ} {s : Store Γ} {h X X′ A} → X ≤′ X′ → Satisfies-Heaplet₀ {E} s h X A → Satisfies-Heaplet₀ s h X′ A
--- -- -- -- -- -- -- -- Satisfies-Heaplet₀-monotone {E} {Γ} {s} {h} {X} {X′} {.(_ ↦ _)} prf-1 (Satisfies-Heaplet₀-↦ x x₁ x₂) = Satisfies-Heaplet₀-↦ x x₁ x₂
--- -- -- -- -- -- -- -- Satisfies-Heaplet₀-monotone {E} {Γ} {s} {h} {X} {X′} {.(_ · _)} prf-1 (Satisfies-Heaplet₀-· {_} {_} {_} {_} {_} {p-name} {args} {args-vals} refl x x₁) =
--- -- -- -- -- -- -- --   let
--- -- -- -- -- -- -- --     z = prf-1 p-name h (Vec→Store args-vals) x
--- -- -- -- -- -- -- --   in
--- -- -- -- -- -- -- --   Satisfies-Heaplet₀-· refl z x₁
+Satisfies-Heaplet₀-monotone : ∀ {C} {E} {Γ : Type-Context C} {Δ : E-Type-Context E} {s : Store Γ} {h X X′ A} →
+  X ≤′ X′ → Satisfies-Heaplet₀ {C} {E} {Γ} {Δ} s h X A → Satisfies-Heaplet₀ s h X′ A
+Satisfies-Heaplet₀-monotone {C} {Γ} {s} {h} {X} {X′} le (Satisfies-Heaplet₀-↦ x x₁ x₂) = Satisfies-Heaplet₀-↦ x x₁ x₂
+Satisfies-Heaplet₀-monotone {C} {Γ} {s} {h} {X} {X′} le (Satisfies-Heaplet₀-· {_} {_} {_} {_} {p-name} {_} {args-vals} x x₁ x₂) =
+  Satisfies-Heaplet₀-· x (le p-name X′ (Val-Vec-any-Δ args-vals) x₁) x₂
 
--- -- -- -- -- -- -- -- Satisfies-spatial₀-monotone : ∀ {E} {Γ} {s : Store Γ} {h X X′ A} → X ≤′ X′ → Satisfies-spatial₀ s h X A → Satisfies-spatial₀ s h X′ A
--- -- -- -- -- -- -- -- Satisfies-spatial₀-monotone {E} {Γ} {s} {.[]} {X} {X′} {.[]} prf-1 Satisfies-spatial₀-[] = Satisfies-spatial₀-[]
--- -- -- -- -- -- -- -- Satisfies-spatial₀-monotone {E} {Γ} {s} {h} {X} {X′} {.(_ ∷ _)} prf-1 (Satisfies-spatial₀-∷ x x₁ prf-2) =
--- -- -- -- -- -- -- --   Satisfies-spatial₀-∷ x (Satisfies-Heaplet₀-monotone {E} prf-1 x₁) (Satisfies-spatial₀-monotone prf-1 prf-2)
 
--- -- -- -- -- -- -- -- Satisfies-Assertion₀-monotone : ∀ {E} {Γ} {s : Store Γ} {h X X′ A} → X ≤′ X′ → Satisfies-Assertion₀ {E} s h X A → Satisfies-Assertion₀ {E} s h X′ A
--- -- -- -- -- -- -- -- Satisfies-Assertion₀-monotone {E} {Γ} {s} {h} {X} {X′} {A} prf-1 record { pure-prf = pure-prf ; spatial-prf = spatial-prf } =
--- -- -- -- -- -- -- --   record { pure-prf = pure-prf ; spatial-prf = Satisfies-spatial₀-monotone prf-1 spatial-prf }
+Satisfies-spatial₀-monotone : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} {s : Store Γ} {h X X′ A} → X ≤′ X′ → Satisfies-spatial₀ {C} {E} {Γ} {Δ} s h X A → Satisfies-spatial₀ s h X′ A
+Satisfies-spatial₀-monotone {C} {E} {Γ} {Δ} {s} {.[]} {X} {X′} {.[]} prf-1 Satisfies-spatial₀-[] = Satisfies-spatial₀-[]
+Satisfies-spatial₀-monotone {C} {E} {Γ} {Δ} {s} {h} {X} {X′} {.(_ ∷ _)} prf-1 (Satisfies-spatial₀-∷ x x₁ prf-2) =
+  Satisfies-spatial₀-∷ x (Satisfies-Heaplet₀-monotone {C} prf-1 x₁) (Satisfies-spatial₀-monotone prf-1 prf-2)
 
--- -- -- -- -- -- -- -- φ-monotone : ∀ {E Γ} {rules} {X X′ : Ind-Pred-Interpret Γ} → X ≤′ X′ → φ {E} rules X ≤′ φ rules X′
--- -- -- -- -- -- -- -- φ-monotone {E} {Γ} {rules} {X} {X′} prf-1 P a b (fst , prf-2 , prf-3) =
--- -- -- -- -- -- -- --   fst , Satisfies-Assertion₀-monotone prf-1 prf-2 , prf-3
+Satisfies-Assertion₀-monotone : ∀ {C E} {Γ} {Δ} {s : Store Γ} {h X X′ A} → X ≤′ X′ → Satisfies-Assertion₀ {C} {E} {Γ} {Δ} s h X A → Satisfies-Assertion₀ s h X′ A
+Satisfies-Assertion₀-monotone {C} {E} {Γ} {s} {h} {X} {X′} {A} prf-1 record { pure-prf = pure-prf ; spatial-prf = spatial-prf } =
+  record { pure-prf = pure-prf ; spatial-prf = Satisfies-spatial₀-monotone prf-1 spatial-prf }
 
--- -- -- -- -- -- -- -- Ordinal : Set
--- -- -- -- -- -- -- -- Ordinal = ℕ
+φ-monotone : ∀ {C E} {Γ} {Δ} {rules} {X X′ : Ind-Pred-Interpret Γ} {store : Store Γ} → X ≤′ X′ → φ {C} {E} {Γ} {Δ} store rules X ≤′ φ store rules X′
+φ-monotone prf-1 P a b (fst , prf-2 , prf-3) =
+  fst , Satisfies-Assertion₀-monotone prf-1 prf-2 , prf-3
 
--- -- -- -- -- -- -- -- iterate-φ : ∀ {E Γ} (rules : List (Ind-Rule Γ)) → Ordinal → Ind-Pred-Interpret Γ
--- -- -- -- -- -- -- -- iterate-φ {E} {Γ} rules zero = ∅-interpret
--- -- -- -- -- -- -- -- iterate-φ {E} {Γ} rules (ℕ.suc α) = φ {E} rules (iterate-φ {E} rules α)
+Ordinal : Set
+Ordinal = ℕ
 
--- -- -- -- -- -- -- -- ⟦_⟧_ : ∀ {E Γ} → List (Ind-Rule Γ) → Ordinal → Ind-Pred-Interpret Γ
--- -- -- -- -- -- -- -- ⟦_⟧_ {E} rules α = iterate-φ {E} rules α
+iterate-φ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → Store Γ → (rules : List (Ind-Rule Γ Δ)) → Ordinal → Ind-Pred-Interpret Γ
+iterate-φ {C} {E} {Γ} store rules zero = ∅-interpret
+iterate-φ {C} {E} {Γ} store rules (ℕ.suc α) = φ {C} store rules (iterate-φ {C} store rules α)
 
--- -- -- -- -- -- -- -- Label-Valuation : Set
--- -- -- -- -- -- -- -- Label-Valuation = Pred-Label → Ordinal
+⟦_⟧_ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → List (Ind-Rule Γ Δ) → Ordinal → Store Γ → Ind-Pred-Interpret Γ
+⟦_⟧_ {C} {E} rules α store = iterate-φ {C} store rules α
 
--- -- -- -- -- -- -- -- data Satisfies-Heaplet {E Γ} (rules : List (Ind-Rule Γ)) (ρ : Label-Valuation) : ∀ (s : Store Γ) → (h : Heap) → Heaplet′ Γ E → Set where
--- -- -- -- -- -- -- --   Satisfies-Heaplet-↦ : ∀ {s : Store Γ} {h} {loc-v rhs-e} {loc rhs} →
--- -- -- -- -- -- -- --     SSL-Expr′-⇓ {E} s (V loc-v) (Val-Loc loc) →
--- -- -- -- -- -- -- --     SSL-Expr′-⇓ s rhs-e rhs →
--- -- -- -- -- -- -- --     h ≡ ((loc , rhs) ∷ []) →
--- -- -- -- -- -- -- --     Satisfies-Heaplet rules ρ s h (loc-v ↦ rhs-e)
+Label-Valuation : Set
+Label-Valuation = Pred-Label → Ordinal
 
--- -- -- -- -- -- -- --   Satisfies-Heaplet-· : ∀ {s : Store Γ} {h} {labeled-p-name p-name args} {args-vals} →
--- -- -- -- -- -- -- --     let α = Pred-Name-label labeled-p-name
--- -- -- -- -- -- -- --     in
--- -- -- -- -- -- -- --     p-name ≡ get-Pred-Name labeled-p-name →
--- -- -- -- -- -- -- --     (⟦_⟧_ {E} rules (ρ α)) p-name h (Vec→Store args-vals) →
--- -- -- -- -- -- -- --     SSL-Expr′-⇓-Vec s args args-vals →
--- -- -- -- -- -- -- --     Satisfies-Heaplet rules ρ s h (labeled-p-name · args)
+data Satisfies-Heaplet {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} (rules : List (Ind-Rule Γ Δ)) (ρ : Label-Valuation) : ∀ (s : Store Γ) → (h : Heap) → Heaplet Γ Δ → Set where
+  Satisfies-Heaplet-↦ : ∀ {α : SSL-Type} {s : Store Γ} {loc-v} {rhs-e : SSL-Expr Γ Δ α} {loc : Loc}  {rhs : Val α} {h : Heap} →
+    SSL-Expr-Val-⇓ {C} Γ Δ s (V loc-v) (Val-Loc loc) →
+    SSL-Expr-Val-⇓ {C} {E} Γ Δ s rhs-e rhs →
+    h ≡ ((α , loc , rhs) ∷ []) →
+    Satisfies-Heaplet rules ρ s h (Points-To (V loc-v) rhs-e)
 
--- -- -- -- -- -- -- -- data Satisfies-spatial {E Γ} (rules : List (Ind-Rule Γ)) (ρ : Label-Valuation) : ∀ (s : Store Γ) → (h : Heap) → List (Heaplet′ Γ E) → Set where
--- -- -- -- -- -- -- --   Satisfies-spatial-[] : ∀ {s : Store Γ} →
--- -- -- -- -- -- -- --     Satisfies-spatial rules ρ s [] []
+  Satisfies-Heaplet-· : ∀ {s : Store Γ} {h} {labeled-p-name p-name args} {args-vals} →
+    let α = Pred-Name-label labeled-p-name
+    in
+    p-name ≡ get-Pred-Name labeled-p-name →
+    (⟦_⟧_ {C} rules (ρ α) s) p-name h (Val-Vec-any-Δ args-vals) →
+    SSL-Expr-⇓-Vec Γ Δ s args args-vals →
+    Satisfies-Heaplet rules ρ s h (labeled-p-name · args)
 
--- -- -- -- -- -- -- --   Satisfies-spatial-∷ : ∀ {s : Store Γ} {h h₁ h₂} {Σ₁ Σ₂} →
--- -- -- -- -- -- -- --     h₁ ∘ h₂ == h →
--- -- -- -- -- -- -- --     Satisfies-Heaplet rules ρ s h₁ Σ₁ →
--- -- -- -- -- -- -- --     Satisfies-spatial rules ρ s h₂ Σ₂ →
--- -- -- -- -- -- -- --     Satisfies-spatial rules ρ s h (Σ₁ ∷ Σ₂)
+data Satisfies-spatial {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} (rules : List (Ind-Rule Γ Δ)) (ρ : Label-Valuation) : ∀ (s : Store Γ) → (h : Heap) → List (Heaplet Γ Δ) → Set where
+  Satisfies-spatial-[] : ∀ {s : Store Γ} →
+    Satisfies-spatial rules ρ s [] []
 
--- -- -- -- -- -- -- -- record Satisfies-Assertion {E Γ} (rules : List (Ind-Rule Γ)) (ρ : Label-Valuation) (s : Store Γ) (h : Heap) (a : Assertion′ Γ E) : Set where
--- -- -- -- -- -- -- --   field
--- -- -- -- -- -- -- --     pure-prf : Satisfies-Expr s (Assertion.pure a) (Assertion.pure-Is-Bool a)
--- -- -- -- -- -- -- --     spatial-prf : Satisfies-spatial rules ρ s h (Assertion.spatial a)
+  Satisfies-spatial-∷ : ∀ {s : Store Γ} {h h₁ h₂} {Σ₁ Σ₂} →
+    h₁ ∘ h₂ == h →
+    Satisfies-Heaplet rules ρ s h₁ Σ₁ →
+    Satisfies-spatial rules ρ s h₂ Σ₂ →
+    Satisfies-spatial rules ρ s h (Σ₁ ∷ Σ₂)
 
--- -- -- -- -- -- -- -- data Label-Constraint : Set where
--- -- -- -- -- -- -- --   Ord-≤ : Pred-Label → Pred-Label → Label-Constraint
--- -- -- -- -- -- -- --   Ord-< : Pred-Label → Pred-Label → Label-Constraint
+record Satisfies-Assertion {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} (rules : List (Ind-Rule Γ Δ)) (ρ : Label-Valuation) (s : Store Γ) (h : Heap) (a : Assertion Γ Δ) : Set where
+  field
+    pure-prf : Satisfies-Expr s (Assertion.pure a)
+    spatial-prf : Satisfies-spatial rules ρ s h (Assertion.spatial a)
 
--- -- -- -- -- -- -- -- data Constraints-hold (ρ : Label-Valuation) : List Label-Constraint → Set where
--- -- -- -- -- -- -- --   Constraints-hold-[] : Constraints-hold ρ []
--- -- -- -- -- -- -- --   Constraints-hold-∷-≤ : ∀ {α β rest} →
--- -- -- -- -- -- -- --     ρ α ≤ ρ β →
--- -- -- -- -- -- -- --     Constraints-hold ρ rest →
--- -- -- -- -- -- -- --     Constraints-hold ρ (Ord-≤ α β ∷ rest)
--- -- -- -- -- -- -- --   Constraints-hold-∷-< : ∀ {α β rest} →
--- -- -- -- -- -- -- --     ρ α < ρ β →
--- -- -- -- -- -- -- --     Constraints-hold ρ rest →
--- -- -- -- -- -- -- --     Constraints-hold ρ (Ord-< α β ∷ rest)
+data Label-Constraint : Set where
+  Ord-≤ : Pred-Label → Pred-Label → Label-Constraint
+  Ord-< : Pred-Label → Pred-Label → Label-Constraint
 
--- -- -- -- -- -- -- -- Constrained-Formula : Exist-Context → SSL-Context → Set
--- -- -- -- -- -- -- -- Constrained-Formula E Γ =
--- -- -- -- -- -- -- --   List Pred-Label × List Label-Constraint × Assertion′ Γ E
+data Constraints-hold (ρ : Label-Valuation) : List Label-Constraint → Set where
+  Constraints-hold-[] : Constraints-hold ρ []
+  Constraints-hold-∷-≤ : ∀ {α β rest} →
+    ρ α ≤ ρ β →
+    Constraints-hold ρ rest →
+    Constraints-hold ρ (Ord-≤ α β ∷ rest)
+  Constraints-hold-∷-< : ∀ {α β rest} →
+    ρ α < ρ β →
+    Constraints-hold ρ rest →
+    Constraints-hold ρ (Ord-< α β ∷ rest)
 
--- -- -- -- -- -- -- -- _==/[_]_ : Label-Valuation → List Pred-Label → Label-Valuation → Set
--- -- -- -- -- -- -- -- _==/[_]_ ρ αs ρ′ = ∀ α → α ∈ αs → ρ α ≡ ρ′ α
+Constrained-Formula : ∀ {C E} → Type-Context C → E-Type-Context E → Set
+Constrained-Formula Γ Δ =
+  List Pred-Label × List Label-Constraint × Assertion Γ Δ
 
--- -- -- -- -- -- -- -- data Satisfies-Constrained-Formula {E Γ} (rules : List (Ind-Rule Γ)) : Label-Valuation → Store Γ → Heap → Constrained-Formula E Γ → Set where
--- -- -- -- -- -- -- --   mk-Satisfies-Constrained-Formula : ∀ {ρ s h αs constraints asn} →
--- -- -- -- -- -- -- --     Σ Label-Valuation (λ ρ′ →
--- -- -- -- -- -- -- --       ρ′ ==/[ αs ] ρ →
--- -- -- -- -- -- -- --       Constraints-hold ρ′ constraints →
--- -- -- -- -- -- -- --       Satisfies-Assertion rules ρ′ s h asn) →
--- -- -- -- -- -- -- --     Satisfies-Constrained-Formula rules ρ s h (αs , constraints , asn)
+_==/[_]_ : Label-Valuation → List Pred-Label → Label-Valuation → Set
+_==/[_]_ ρ αs ρ′ = ∀ α → α ∈ αs → ρ α ≡ ρ′ α
 
--- -- -- -- -- -- -- -- _,_,_⊨[_]_ : ∀ {E Γ} → Label-Valuation → Store Γ → Heap → List (Ind-Rule Γ) → Constrained-Formula E Γ → Set
--- -- -- -- -- -- -- -- _,_,_⊨[_]_ ρ s h rules asn = Satisfies-Constrained-Formula rules ρ s h asn
+data Satisfies-Constrained-Formula {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} (rules : List (Ind-Rule Γ Δ)) : Label-Valuation → Store Γ → Heap → Constrained-Formula Γ Δ → Set where
+  mk-Satisfies-Constrained-Formula : ∀ {ρ} {s : Store Γ} {h αs constraints asn} →
+    Σ Label-Valuation (λ ρ′ →
+      ρ′ ==/[ αs ] ρ →
+      Constraints-hold ρ′ constraints →
+      Satisfies-Assertion {C} {E} {Γ} {Δ} rules ρ′ s h asn) →
+    Satisfies-Constrained-Formula rules ρ s h (αs , constraints , asn)
+
+_,_,_⊨[_]_ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → Label-Valuation → Store Γ → Heap → List (Ind-Rule Γ Δ) → Constrained-Formula Γ Δ → Set
+_,_,_⊨[_]_ ρ s h rules asn = Satisfies-Constrained-Formula rules ρ s h asn
