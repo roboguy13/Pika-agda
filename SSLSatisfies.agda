@@ -76,7 +76,8 @@ eval store (Sub e e₁) with eval store e | eval store e₁
 ... | Val-Int x , prf-x | Val-Int y , prf-y = Val-Int (x - y) , SSL-Expr-Val-⇓-Sub prf-x prf-y
 eval store (And e e₁) with eval store e | eval store e₁
 ... | Val-Bool x , prf-x | Val-Bool y , prf-y = Val-Bool (x ∧ y) , SSL-Expr-Val-⇓-And prf-x prf-y
-eval store (Not e) = {!!}
+eval store (Not e) with eval store e
+eval store (Not e) | Val-Bool x , prf-x = Val-Bool (not x) , SSL-Expr-Val-⇓-Not prf-x
 eval store (Equal e e₁) with eval store e | eval store e₁
 eval store (Equal e e₁) | Val-Loc x , prf-x | Val-Loc x₁ , prf-y with Loc-eq-dec x x₁
 eval store (Equal e e₁) | Val-Loc x , prf-x | Val-Loc x₁ , prf-y | inj₁ refl = Val-Bool true , SSL-Expr-Val-⇓-Equal-true prf-x prf-y refl
