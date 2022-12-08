@@ -3,6 +3,10 @@ open import Data.Nat
 open import Data.List
 open import Data.Integer
 open import Data.Product
+open import Relation.Binary.PropositionalEquality hiding ([_])
+open import Data.Sum
+open import Data.Bool
+open import Data.Unit
 
 module SSLTests
   where
@@ -34,7 +38,18 @@ data Loc-Name : Set where
   Loc-Y : Loc-Name
   Loc-Z : Loc-Name
 
-open import SSLSatisfies (Pred-Name) (Pred-Label) (Loc-Name)
+Loc-Name-eq-dec : ∀ (x y : Loc-Name) → (x ≡ y) ⊎ (x ≢ y)
+Loc-Name-eq-dec Loc-X Loc-X = inj₁ refl
+Loc-Name-eq-dec Loc-X Loc-Y = inj₂ (λ ())
+Loc-Name-eq-dec Loc-X Loc-Z = inj₂ (λ ())
+Loc-Name-eq-dec Loc-Y Loc-X = inj₂ (λ ())
+Loc-Name-eq-dec Loc-Y Loc-Y = inj₁ refl
+Loc-Name-eq-dec Loc-Y Loc-Z = inj₂ (λ ())
+Loc-Name-eq-dec Loc-Z Loc-X = inj₂ (λ ())
+Loc-Name-eq-dec Loc-Z Loc-Y = inj₂ (λ ())
+Loc-Name-eq-dec Loc-Z Loc-Z = inj₁ refl
+
+open import SSLSatisfies (Pred-Name) (Pred-Label) (Loc-Name) (Loc-Name-eq-dec)
 open import SSL (Pred-Name) (Pred-Label) (Loc-Name)
 open Ambient-Context
 
@@ -75,7 +90,7 @@ sll =
                     ; spatial =
                       Points-To (V Here) (Exists-V EV-Here)  -- x :-> v
                       ∷
-                      Points-To (Lit (Val-Loc (mk-Loc Loc-X 1))) (Exists-V (EV-There EV-Here)) -- (x+1) :-> nxt
+                      Points-To (Loc-Ix (V Here) 1) (Exists-V (EV-There EV-Here)) -- (x+1) :-> nxt
                       ∷
                       (label "sll" α · Vec-S (Exists-V (EV-There EV-Here)) Vec-Z) -- sll_α(x)
                       ∷ []
@@ -87,6 +102,16 @@ sll =
 store : Store sll-Γ
 store Here = Val-Loc (mk-Loc Loc-X 0)
 
-sll-test-1 :
-  ρ , {!!} , {!!} ⊨[ {!!} ] {!!}
-sll-test-1 = {!!}
+heap-0 : Heap
+heap-0 = (Loc-Type , mk-Loc Loc-X 0 , Val-Loc Null) ∷ []
+-- heap-0 = []
+
+heap-1 : Heap
+heap-1 = (Int-Type , mk-Loc Loc-X 0 , Val-Int (+ 7)) ∷ []
+
+constrained-asn-test-1 : Constrained-Formula sll-Γ sll-Δ
+constrained-asn-test-1 = ((α ∷ []) , [] , record { pure = Lit (Val-Bool true) ; spatial = (label "sll" α · Vec-S (Lit (Val-Loc (mk-Loc Loc-X 0))) Vec-Z) ∷ [] }) -- sll_α(x)
+
+sll-test-0 :
+  ρ , store , heap-0 ⊨[ sll ] constrained-asn-test-1
+sll-test-0 = mk-Satisfies-Constrained-Formula (ρ , λ x x₁ → record { pure-prf = Lit (Val-Int (+ 7)) , Lit (Val-Loc (mk-Loc Loc-X 0)) , tt ; spatial-prf = Satisfies-spatial-∷ {!!} {!!} {!!} })
