@@ -1,5 +1,8 @@
+open import Data.String
+
 module Layout
   where
 
-data Layout : Set where
+open import Expr
+
 

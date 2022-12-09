@@ -112,6 +112,17 @@ heap-1 = (Int-Type , mk-Loc Loc-X 0 , Val-Int (+ 7)) ∷ []
 constrained-asn-test-1 : Constrained-Formula sll-Γ sll-Δ
 constrained-asn-test-1 = ((α ∷ []) , [] , record { pure = Lit (Val-Bool true) ; spatial = (label "sll" α · Vec-S (Lit (Val-Loc (mk-Loc Loc-X 0))) Vec-Z) ∷ [] }) -- sll_α(x)
 
+sll-test-0-formula : ρ ==/[ α ∷ [] ] ρ →
+  Constraints-hold ρ [] →
+  Satisfies-Assertion sll ρ store heap-0
+  (record
+  { pure = Lit (Val-Bool true)
+  ; spatial =
+      (label "sll" α · Vec-S (Lit (Val-Loc (mk-Loc Loc-X 0))) Vec-Z) ∷ []
+  })
+sll-test-0-formula x x₁ =
+  record { pure-prf = Lit (Val-Int (+ 7)) , Lit (Val-Loc (mk-Loc Loc-X 0)) , tt ; spatial-prf = Satisfies-spatial-∷ {!!} {!!} {!!} }
+
 sll-test-0 :
   ρ , store , heap-0 ⊨[ sll ] constrained-asn-test-1
-sll-test-0 = mk-Satisfies-Constrained-Formula (ρ , λ x x₁ → record { pure-prf = Lit (Val-Int (+ 7)) , Lit (Val-Loc (mk-Loc Loc-X 0)) , tt ; spatial-prf = Satisfies-spatial-∷ {!!} {!!} {!!} })
+sll-test-0 = mk-Satisfies-Constrained-Formula (ρ , sll-test-0-formula)

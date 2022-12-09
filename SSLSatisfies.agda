@@ -120,20 +120,91 @@ data Dom : Heap → List Loc → Set where
     Dom rest locs →
     Dom ((α , loc , i) ∷ rest) (loc ∷ locs)
 
+Dom-exists : ∀ {h} →
+  ∃[ locs ] Dom h locs
+Dom-exists {[]} = [] , Dom-[]
+Dom-exists {(α , loc , i) ∷ h} with Dom-exists {h}
+... | locs , prf = loc ∷ locs , Dom-∷ prf
+
+Dom-cons : ∀ {h locs α x i} →
+  Dom h locs →
+  Dom ((α , x , i) ∷ h) (x ∷ locs)
+Dom-cons {.[]} {.[]} {α} {x} {i} Dom-[] = Dom-∷ Dom-[]
+Dom-cons {.((_ , _ , _) ∷ _)} {.(_ ∷ _)} {α} {x} {i} (Dom-∷ prf) = Dom-∷ (Dom-cons prf)
+
 _∈_ : ∀ {A} → A → List A → Set
 x ∈ xs = Any (_≡ x) xs
 
-data Disjoint : Heap → Heap → Set where
-  Disjoint-[] : ∀ {h} → Disjoint [] h
-  Disjoint-∷ : ∀ {α loc i rest h dom-h} →
-    Disjoint rest h →
-    Dom h dom-h →
-    ¬ (loc ∈ dom-h) →
-    Disjoint ((α , loc , i) ∷ rest) h
+_∉_ : ∀ {A} → A → List A → Set
+x ∉ xs = ¬ (x ∈ xs)
+
+¬∈[] : ∀ {A} {x : A} → ¬ (x ∈ [])
+¬∈[] ()
+
+∷∈ : ∀ {A} {x y : A} {xs} → x ∈ xs → x ∈ (y ∷ xs)
+∷∈ {A} {x} {y} {xs} prf = there prf
+
+app-∷ : ∀ {A : Set} {x : A} {xs ys} → (x ∷ xs ++ ys) ≡ x ∷ (xs ++ ys)
+app-∷ {A} {x} {xs} {ys} = refl
+
+app-[] : ∀ {ℓ} {A : Set ℓ} (xs : List A) → xs ++ [] ≡ xs
+app-[] {_} {_} [] = refl
+app-[] {_} {_} (x ∷ xs) rewrite app-[] xs = refl
+
+∈-app-left : ∀ {A} {x : A} {xs} (ys : List A) → x ∈ xs → x ∈ (xs ++ ys)
+∈-app-left {A} {x} {xs} [] prf rewrite app-[] xs = prf
+∈-app-left {A} {x} {.(_ ∷ _)} (x₁ ∷ ys) (here px) = here px
+∈-app-left {A} {x} {.(_ ∷ _)} (x₁ ∷ ys) (there prf) = there (∈-app-left {_} {_} {_} (x₁ ∷ ys) prf)
+
+∈-cons-app : ∀ {A} {x z : A} {xs ys} → x ∈ (xs ++ ys) → x ∈ (xs ++ z ∷ ys)
+∈-cons-app {_} {x} {z} {[]} {ys} prf = there prf
+∈-cons-app {_} {x} {z} {x₁ ∷ xs} {ys} (here px) = here px
+∈-cons-app {_} {x} {z} {x₁ ∷ xs} {ys} (there prf) = there (∈-cons-app prf)
+
+∈-app-sym : ∀ {A} {x : A} {xs ys} → x ∈ (xs ++ ys) → x ∈ (ys ++ xs)
+∈-app-sym {A} {x} {[]} {ys} prf rewrite app-[] ys = prf
+∈-app-sym {A} {x} {x₁ ∷ xs} {[]} prf rewrite app-[] (x₁ ∷ xs) = prf
+∈-app-sym {A} {x} {x₁ ∷ xs} {x₂ ∷ ys} (here prf) = ∷∈ (∈-app-sym {_} {_} {x₁ ∷ xs} {ys} (here prf))
+∈-app-sym {A} {x} {x₁ ∷ xs} {x₂ ∷ ys} (there prf) with ∷∈ {_} {x} {x₂} (∈-app-sym {_} {x} {xs} {x₂ ∷ ys} (prf))
+... | here px = here px
+... | there (here px) = here px
+... | there (there z) = there (∈-cons-app z)
+
+Disjoint : Heap → Heap → Set
+Disjoint a b =
+  ∀ {dom-a dom-b} →
+  Dom a dom-a →
+  Dom b dom-b →
+  (∀ loc → loc ∈ dom-a → loc ∉ dom-b)
+    ×
+  (∀ loc → loc ∈ dom-b → loc ∉ dom-a)
+
+Disjoint-left-[] : ∀ {h} → Disjoint [] h
+Disjoint-left-[] {h} Dom-[] x₁ = (λ loc x₂ x₃ → ¬∈[] x₂) , λ loc x x₂ → ¬∈[] x₂
+
+Disjoint-left-cons : ∀ {x a b} → Disjoint (x ∷ a) b → Disjoint a b
+Disjoint-left-cons {x} {a} {b} prf dom-a dom-b =
+  let
+    z , w = prf (Dom-cons dom-a) dom-b
+  in
+  (λ loc x₁ x₂ → z loc (there x₁) x₂) ,
+  λ loc x₁ x₂ → z loc (there x₂) x₁
+
+Disjoint-sym : ∀ {a b} → Disjoint a b → Disjoint b a
+Disjoint-sym {a} {b} prf Dom-b Dom-a =
+  let
+    z , w = prf Dom-a Dom-b
+  in
+  (λ loc x x₁ → proj₁ (prf Dom-a Dom-b) loc x₁ x) , (λ loc x x₁ → proj₁ (prf Dom-a Dom-b) loc x x₁)
 
 _≡S_ : ∀ {A} → List A → List A → Set
 _≡S_ xs ys = (∀ x → x ∈ xs → x ∈ ys) × (∀ y → y ∈ ys → y ∈ xs)
 
+≡S-app-sym : ∀ {A} {zs : List A} → (xs ys : List A) → zs ≡S (xs ++ ys) → zs ≡S (ys ++ xs)
+≡S-app-sym {A} {zs} xs ys (p , q) =
+  (λ x x₁ → ∈-app-sym {_} {x} {xs} {ys} (p x x₁)) , λ y x → q y (∈-app-sym {_} {y} {ys} {xs} x)
+
+-- See https://types.pl/web/@pigworker/109429538158539127
 data _∘_==_ : Heap → Heap → Heap → Set where
   mk-∘ : ∀ h h′ h′′ →
     Disjoint h h′ →
@@ -316,3 +387,163 @@ data Satisfies-Constrained-Formula {C E} {Γ : Type-Context C} {Δ : E-Type-Cont
 
 _,_,_⊨[_]_ : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} → Label-Valuation → Store Γ → Heap → List (Ind-Rule Γ Δ) → Constrained-Formula Γ Δ → Set
 _,_,_⊨[_]_ ρ s h rules asn = Satisfies-Constrained-Formula rules ρ s h asn
+
+Splitting-List : Heap → Set
+Splitting-List h =
+  List (∃[ h₁ ] ∃[ h₂ ] (h₁ ∘ h₂ == h))
+
+_∈S_ : ∀ {h} → Heap × Heap → Splitting-List h → Set
+_∈S_ {h} (h₁ , h₂) splitting = Any go splitting
+  where
+    go : (∃[ h₁′ ] ∃[ h₂′ ] (h₁′ ∘ h₂′ == h)) → Set
+    go (h₁′ , h₂′ , _) = (h₁′ ≡S h₁) × (h₂′ ≡S h₂)
+
+Universal-Splitting-List : Heap → Set
+Universal-Splitting-List h =
+  Σ (Splitting-List h) λ xs →
+  ∀ h₁ h₂ →
+  h₁ ∘ h₂ == h →
+  (h₁ , h₂) ∈S xs
+
+Heap-concat-sym : ∀ {h h₁ h₂} →
+  h₁ ∘ h₂ == h →
+  h₂ ∘ h₁ == h
+Heap-concat-sym {.[]} {h₁} {h₂} (mk-∘ .h₁ .h₂ [] x x₁) = mk-∘ h₂ h₁ [] (Disjoint-sym x) (≡S-app-sym h₁ h₂ x₁)
+Heap-concat-sym {.(x₂ ∷ h)} {h₁} {h₂} (mk-∘ .h₁ .h₂ (x₂ ∷ h) x x₁) = mk-∘ h₂ h₁ (x₂ ∷ h) (Disjoint-sym x) (≡S-app-sym h₁ h₂ x₁)
+
+≡S-∈ : ∀ {A} {x : A} {xs ys} →
+  x ∈ ys →
+  xs ≡S ys →
+  x ∈ xs
+≡S-∈ {_} {x} prf-1 prf-2 = proj₂ prf-2 x prf-1
+
+≡S-∉-left : ∀ {A} {x : A} {xs ys zs} →
+  x ∉ zs →
+  zs ≡S (xs ++ ys) →
+  x ∉ xs
+≡S-∉-left {A} {x} {[]} {ys} {zs} prf-1 prf-2 = λ ()
+≡S-∉-left {A} {x} {x₁ ∷ xs} {ys} {zs} prf-1 prf-2 = λ x₂ →
+  let
+    z = ∈-app-left ys x₂
+    w = ≡S-∈ z prf-2
+  in
+  prf-1 w
+
+-- Heap-to-app : ∀ {h h₁ h₂ : Heap} {dom-h dom-h₁ dom-h₂} →
+--   Dom h dom-h →
+--   Dom h₁ dom-h₁ →
+--   Dom h₂ dom-h₂ →
+--   h ≡S (h₁ ++ h₂) →
+--   dom-h ≡S (dom-h₁ ++ dom-h₂)
+-- Heap-to-app Dom-h Dom-h₁ Dom-h₂ (fst , snd) = (λ x x₁ → {!!}) , {!!}
+
+-- Heap-concat-∉ : ∀ {loc h h₁ h₂ dom-h dom-h₁ dom-h₂} →
+--   Dom h dom-h →
+--   Dom h₁ dom-h₁ →
+--   Dom h₂ dom-h₂ →
+--   loc ∉ dom-h →
+--   h₁ ∘ h₂ == h →
+--   (loc ∉ dom-h₁) × (loc ∉ dom-h₂)
+-- Heap-concat-∉ {loc} {h} {h₁} {h₂} {dom-h} {dom-h₁} {dom-h₂} Dom-h Dom-h₁ Dom-h₂ prf-1 (mk-∘ .h₁ .h₂ .h x x₁) =
+--   (λ x → ≡S-∉-left prf-1 (Heap-to-app Dom-h Dom-h₁ Dom-h₂ x₁) x) ,
+--   λ x₂ → ≡S-∉-left prf-1 (Heap-to-app Dom-h Dom-h₂ Dom-h₁ (≡S-app-sym h₁ h₂ x₁)) x₂
+
+-- Disjoint-extend : ∀ {α loc i h₁ h₂ h dom-h} →
+--   Dom h dom-h →
+--   loc ∉ dom-h →
+--   Disjoint h₁ h₂ →
+
+-- Heap-concat-cons : ∀ {α loc i h h₁ h₂ dom-h} →
+--   Dom h dom-h →
+--   loc ∉ dom-h →
+--   h₁ ∘ h₂ == h →
+--   ((α , loc , i) ∷ h₁) ∘ h₂ == ((α , loc , i) ∷ h)
+-- Heap-concat-cons {α} {loc} {i} {h} {h₁} {h₂} {dom-h} Dom-h prf-1 prf-2 =
+--   mk-∘ ((α , loc , i) ∷ h₁) h₂ ((α , loc , i) ∷ h)
+--     -- (λ x₂ x₃ → (λ loc₁ x₄ x₅ → proj₂ (x {!!} x₃) loc₁ {!!} x₄) , {!!})
+--     (λ x₂ x₃ → (λ loc₁ x₄ x₅ → proj₁ (Heap-concat-∉ {!!} {!!} x₃ {!!} prf-2) {!!}) , {!!})
+--     {!!}
+
+-- prepend-splitting-left : ∀ {h α loc i dom-h} → Dom h dom-h → loc ∉ dom-h → Splitting-List h → Splitting-List ((α , loc , i) ∷ h)
+-- prepend-splitting-left {h} {α} {loc} {i} {dom-h} Dom-h prf [] = []
+-- prepend-splitting-left {h} {α} {loc} {i} {dom-h} Dom-h prf ((fst , fst₁ , snd) ∷ s) =
+--   (((α , loc , i) ∷ fst)
+--    , fst₁
+--    , {!!}
+--   ) ∷ prepend-splitting-left Dom-h prf s
+
+
+prepend-splitting : ∀ {h x} → Splitting-List h → Splitting-List (x ∷ h)
+prepend-splitting {h} {x} [] = []
+prepend-splitting {h} {x} ((fst , fst₁ , snd) ∷ s) = prepend-splitting s
+
+-- heap-splittings : (h : Heap) → Universal-Splitting-List h
+-- heap-splittings [] = ys , go
+--   where
+--     ys = (([] , [] , mk-∘ [] [] [] Disjoint-left-[] ((λ x x₁ → x₁) , (λ x x₁ → x₁))) ∷ [])
+--     go : (h₁ h₂ : Heap) → h₁ ∘ h₂ == [] → (h₁ , h₂) ∈S ys
+--     go [] [] (mk-∘ .[] .[] .[] x x₁) = here (((λ x x₁ → x₁) , (λ x x₁ → x₁)) , (λ x x₁ → x₁) , (λ x x₁ → x₁))
+--     go [] (x₂ ∷ h₂) (mk-∘ .[] .(x₂ ∷ h₂) .[] x (fst , snd)) with snd x₂ (here refl)
+--     ... | ()
+--     go (x₂ ∷ h₁) [] (mk-∘ .(x₂ ∷ h₁) .[] .[] x (fst , snd)) with snd x₂ (here refl)
+--     ... | ()
+--     go (x₂ ∷ h₁) (x₃ ∷ h₂) (mk-∘ .(x₂ ∷ h₁) .(x₃ ∷ h₂) .[] x (fst , snd)) with snd x₂ (here refl)
+--     ... | ()
+
+-- heap-splittings (x ∷ xs) with heap-splittings xs
+-- ... | fst , snd =
+--   let
+--     ys = {!!}
+--   in
+--   [] , {!!}
+
+-- h₁ ∘ h₂ == h →
+
+  -- Satisfies-spatial-∷ : ∀ {s : Store Γ} {h h₁ h₂} {Σ₁ Σ₂} →
+  --   h₁ ∘ h₂ == h →
+  --   Satisfies-Heaplet rules ρ s h₁ Σ₁ →
+  --   Satisfies-spatial rules ρ s h₂ Σ₂ →
+  --   Satisfies-spatial rules ρ s h (Σ₁ ∷ Σ₂)
+
+  -- Satisfies-Heaplet-↦ : ∀ {α : SSL-Type} {s : Store Γ} {loc-v} {rhs-e : SSL-Expr Γ Δ α} {loc : Loc}  {rhs : Val α} {h : Heap} →
+  --   SSL-Expr-Val-⇓ {C} Γ Δ s (V loc-v) (Val-Loc loc) →
+  --   SSL-Expr-Val-⇓ {C} {E} Γ Δ s rhs-e rhs →
+  --   h ≡ ((α , loc , rhs) ∷ []) →
+  --   Satisfies-Heaplet rules ρ s h (Points-To (V loc-v) rhs-e)
+
+-- decide-Satisfies-Heaplet : ∀ {C} {Γ : Type-Context C} {rules ρ} {s : Store Γ} h₁ Σ₁ →
+--   (Satisfies-Heaplet {C} {Exist-Z} {Γ} {ε} rules ρ s h₁ Σ₁)
+--     ⊎
+--   ¬ (Satisfies-Heaplet rules ρ s h₁ Σ₁)
+-- decide-Satisfies-Heaplet {_} {_} {rules} {ρ} {s} [] (Points-To lhs x) = inj₂ λ { (Satisfies-Heaplet-↦ prf-1 prf-2 ()) }
+-- decide-Satisfies-Heaplet {_} {_} {rules} {ρ} {s} (x₁ ∷ h₁) (Points-To lhs x) = {!!}
+-- -- ... | fst , snd = {!!}
+-- decide-Satisfies-Heaplet {_} {_} {rules} {ρ} {s} h₁ (n · x) = {!!}
+
+
+-- decide-Satisfies-spatial-∷ : ∀ {C} {Γ : Type-Context C}  {ρ} {rules} {s : Store Γ} {h h₁ h₂} {Σ₁ Σ₂} →
+--     h₁ ∘ h₂ == h →
+--     -- Satisfies-Heaplet rules ρ s h₁ Σ₁ →
+--     -- Satisfies-spatial rules ρ s h₂ Σ₂ →
+--     (Satisfies-spatial {C} {_} {Γ} {Δ} rules ρ s h (Σ₁ ∷ Σ₂))
+--       ⊎
+--     ¬ (Satisfies-spatial rules ρ s h (Σ₁ ∷ Σ₂))
+-- decide-Satisfies-spatial-∷ = {!!}
+
+-- decide-models-split : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} →
+--   (ρ : Label-Valuation) → (store : Store Γ) → (h : Heap) → (rules : List (Ind-Rule Γ Δ)) →
+--   (formula : Constrained-Formula Γ Δ) →
+--   (h-spl : Universal-Splitting-List h) →
+--   (ρ , store , h ⊨[ rules ] formula)
+--     ⊎
+--   ¬ (ρ , store , h ⊨[ rules ] formula)
+-- decide-models-split = {!!}
+
+
+-- decide-models : ∀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} →
+--   (ρ : Label-Valuation) → (store : Store Γ) → (h : Heap) → (rules : List (Ind-Rule Γ Δ)) →
+--   (formula : Constrained-Formula Γ Δ) →
+--   (ρ , store , h ⊨[ rules ] formula)
+--     ⊎
+--   ¬ (ρ , store , h ⊨[ rules ] formula)
+-- decide-models ρ store h rules (fst , snd) = {!!}
