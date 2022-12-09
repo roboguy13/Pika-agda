@@ -12,8 +12,6 @@ open import Data.Empty
 open import Data.Unit
 
 module Expr
-  (Var-Name : Set)
-  (to-Var-Name : String → Var-Name)
   (Pred-Name : Set)
   (Pred-Label : Set)
   (Loc-Name : Set)
@@ -73,6 +71,16 @@ data Val : Type → Set where
   Val-Int : ℤ → Val Int-Ty
   Val-Bool : Bool → Val Bool-Ty
 
+-- →SSL-Type : ∀ {α} → Base-Type α → ∃[ ssl-α ] To-SSL-Type α ssl-α
+-- →SSL-Type prf = {!!}
+
+-- →SSL-Val : ∀ {α} → Val α → SSL-Val
+-- →SSL-Val v = ?
+
+data To-SSL-Val : ∀ {α ssl-α} → Val α → SSL-Val ssl-α → Set where
+  To-SSL-Val-Int : ∀ {i} → To-SSL-Val (Val-Int i) (Val-Int i)
+  To-SSL-Val-Bool : ∀ {b} → To-SSL-Val (Val-Bool b) (Val-Bool b)
+
 record Constr : Set where
   field
     name : Constr-Name
@@ -88,7 +96,7 @@ data Expr : {C : SSL-Context} → Type-Context C → Context → Type → Set
 
 data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
   Points-To : ∀ {α SSL-α} →
-    SSL-Var Δ SSL-α → Expr Δ Γ α →
+    SSL-Expr Δ ε SSL-α → Expr Δ Γ α →
     Base-Type α →
     To-SSL-Type α SSL-α →
     L-Heaplet Δ Γ
@@ -100,12 +108,27 @@ data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
     Expr Δ Γ (Layout-Ty n) →
     L-Heaplet Δ Γ
 
+-- A heaplet with no applications and all RHS's are base values
+data Val-Heaplet : Set where
+  Val-Points-To : ∀ {α} →
+    Loc → Val α →
+    Base-Type α →
+    Val-Heaplet
+
+
+Layout-Body : ∀ {C} (Δ : Type-Context C) (Γ : Context) → Set
+Layout-Body Δ Γ = List (L-Heaplet Δ Γ)
+
+-- Gotten by applying a layout to value arguments
+Val-Layout-Body : Set
+Val-Layout-Body = List Val-Heaplet
+
 record Layout-Branch (name : Layout-Name) (constr : Constr) : Set where
   inductive
   field
     ssl-C : SSL-Context
     ssl-Δ : Type-Context ssl-C
-    body : List (L-Heaplet ssl-Δ (Constr.field-Γ constr))
+    body : Layout-Body ssl-Δ (Constr.field-Γ constr)
 
 data Layout-Branches (L-name : Layout-Name) : (adt : Adt) → Set where
   Layout-Branches-[] : ∀ {name} →
@@ -223,3 +246,36 @@ data Expr where
   Apply : ∀ {f-name} {Γ A B} {arg : Expr ε Γ (Layout-Ty (Layout.name A))} →
     (f-name , A , B) ∈ Global-Fn-Type-Env →
     Expr ε Γ (Fn-Ty (Layout-Ty (Layout.name A)) (Layout-Ty (Layout.name B)))
+
+data Fs-Store : Context → Set where
+  Fs-Store-∅ : Fs-Store ∅
+  Fs-Store-cons : ∀ {Γ α} →
+    Val α →
+    Fs-Store Γ →
+    Fs-Store (Γ ,, α)
+
+data To-SSL-Context : ∀ {C} → Context → Type-Context C → Set where
+  To-SSL-Context-Z : To-SSL-Context ∅ ε
+  To-SSL-Context-S : ∀ {C} {Γ α ssl-α Δ} →
+    To-SSL-Type α ssl-α →
+    To-SSL-Context {C} Γ Δ →
+    To-SSL-Context (Γ ,, α) (Δ ,, ssl-α)
+
+data To-Store : ∀ {C} {Δ : Type-Context C} {Γ} → Fs-Store Γ → Store Δ → Set where
+  To-Store-∅ : To-Store Fs-Store-∅ Store-[]
+  To-Store-cons : ∀ {C} {Δ : Type-Context C} {Γ α ssl-α}
+                    {val : Val α}
+                    {ssl-val : SSL-Val ssl-α}
+                    {fs-store : Fs-Store Γ}
+                    {store : Store Δ} →
+    To-SSL-Type α ssl-α →
+    To-SSL-Val val ssl-val →
+    To-Store fs-store store →
+    To-Store (Fs-Store-cons val fs-store) (Store-cons ssl-val store)
+
+-- to-SSL-Context : Context → ∃[ C ] Type-Context C
+-- to-SSL-Context ∅ = Z , ε
+-- to-SSL-Context (Γ ,, x) with to-SSL-Context Γ
+-- ... | n , Δ = S n , ({!!} ,, to-SSL
+
+-- Fs-Store→Store : Fs-Store Γ → 

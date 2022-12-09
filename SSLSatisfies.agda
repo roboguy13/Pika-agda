@@ -63,10 +63,9 @@ truncate : ∀ {ℓ} {A : Set ℓ} {x y : A} → (x ≡ y) ⊎ (x ≢ y) → Boo
 truncate (inj₁ x) = true
 truncate (inj₂ y) = false
 
-
 eval : ∀ {C} {Γ : Type-Context C} (store : Store Γ) {α} → (e : SSL-Expr Γ ε α) →
   ∃[ v ] (SSL-Expr-Val-⇓ Γ ε store e v)
-eval store (V x) = store x , SSL-Expr-Val-⇓-V
+eval store (V x) = store-lookup store x , SSL-Expr-Val-⇓-V
 eval store (Exists-V ())
 eval store (Lit x) = x , SSL-Expr-Val-⇓-Lit
 eval store (Add e e₁) with eval store e | eval store e₁
@@ -97,7 +96,7 @@ eval store (Equal e e₁) | Val-Bool x , prf-x | Val-Bool x₁ , prf-y | inj₂ 
 
 
 Satisfies-Expr₀ : ∀ {C : SSL-Context} {Γ : Type-Context C} (s : Store Γ) → (e : SSL-Expr Γ ε Bool-Type) → Set
-Satisfies-Expr₀ s (V x) with s x
+Satisfies-Expr₀ s (V x) with store-lookup s x
 ... | Val-Bool true = ⊤
 ... | Val-Bool false = ⊥
 Satisfies-Expr₀ s (Lit (Val-Bool true)) = ⊤

@@ -66,8 +66,8 @@ data Type-Context : (C : SSL-Context) → Set where
 
 
 data SSL-Var : {C : SSL-Context} → (Γ : Type-Context C) → SSL-Type → Set where
-  Here : ∀ {C Γ α} → SSL-Var {S C} (Γ ,, α) α
-  There : ∀ {C Γ α β} → SSL-Var {C} Γ α → SSL-Var {S C} (Γ ,, β) α
+  SSL-Here : ∀ {C Γ α} → SSL-Var {S C} (Γ ,, α) α
+  SSL-There : ∀ {C Γ α β} → SSL-Var {C} Γ α → SSL-Var {S C} (Γ ,, β) α
 
 -- SSL-Var : SSL-Context → Set
 -- SSL-Var C = Ixed (SSL-Var₀ C)
@@ -154,8 +154,8 @@ E-subst-1 {C} {E} {Γ} {Δ} {α} {β} N M = E-subst σ N
 V-ext : ∀ {C C′ : SSL-Context} {Γ : Type-Context C} {Γ′ : Type-Context C′} →
   (∀ {α} → SSL-Var Γ α → SSL-Var Γ′ α) →
   (∀ {α β} → SSL-Var (Γ ,, β) α → SSL-Var (Γ′ ,, β) α)
-V-ext ρ Here = Here
-V-ext ρ (There ev) = There (ρ ev)
+V-ext ρ SSL-Here = SSL-Here
+V-ext ρ (SSL-There ev) = SSL-There (ρ ev)
 
 V-rename : ∀ {C C′} {E} {Γ : Type-Context C} {Γ′ : Type-Context C′} {Δ : E-Type-Context E} →
   (∀ {α} → SSL-Var Γ α → SSL-Var Γ′ α) →
@@ -173,8 +173,8 @@ V-rename ρ (Equal e e₁) = Equal (V-rename ρ e) (V-rename ρ e₁)
 V-exts : ∀ {C C′} {E} {Γ : Type-Context C} {Γ′ : Type-Context C′} {Δ : E-Type-Context E} →
   (∀ {α} → SSL-Var Γ α → SSL-Expr Γ′ Δ α) →
   (∀ {α β} → SSL-Var (Γ ,, β) α → SSL-Expr (Γ′ ,, β) Δ α)
-V-exts ρ Here = V Here
-V-exts ρ (There ev) = V-rename There (ρ ev)
+V-exts ρ SSL-Here = V SSL-Here
+V-exts ρ (SSL-There ev) = V-rename SSL-There (ρ ev)
 
 V-subst : ∀ {C C′} {E} {Γ : Type-Context C} {Γ′ : Type-Context C′} {Δ : E-Type-Context E} →
   (∀ {α} → SSL-Var Γ α → SSL-Expr Γ′ Δ α) →
@@ -201,8 +201,8 @@ V-subst-1 : ∀ {C} {E : Exist-Context} {Γ : Type-Context C} {Δ : E-Type-Conte
 V-subst-1 {C} {E} {Γ} {Δ} {α} {β} N M = V-subst σ N
   where
     σ : ∀ {γ} → SSL-Var (Γ ,, β) γ → SSL-Expr Γ Δ γ
-    σ Here = M
-    σ (There v) = V v
+    σ SSL-Here = M
+    σ (SSL-There v) = V v
 
 Vec-Elem : Set₁
 Vec-Elem = ∀ {C : SSL-Context} {E : Exist-Context} (Γ : Type-Context C) (Δ : E-Type-Context E) → SSL-Type → Set
@@ -233,11 +233,26 @@ Val-Vec-any-Δ : ∀ {C C′ E E′} {Γ : Type-Context C} {Γ′ : Type-Context
 Val-Vec-any-Δ {_} {_} {E} {E′} {Γ} {.ε} {Δ} {Δ′} Vec-Z = Vec-Z
 Val-Vec-any-Δ {_} {_} {E} {E′} {Γ} {.(_ ,, _)} {Δ} {Δ′} (Vec-S x v) = Vec-S x (Val-Vec-any-Δ v)
 
-Store : ∀ {C} (Γ : Type-Context C) → Set
-Store Γ = ∀ {α} → SSL-Var Γ α → Val α
+-- Store : ∀ {C} (Γ : Type-Context C) → Set
+-- Store Γ = ∀ {α} → SSL-Var Γ α → Val α
+
+data Store : ∀ {C} (Γ : Type-Context C) → Set where
+  Store-[] : Store ε
+  Store-cons : ∀ {C} {Γ : Type-Context C} {α} →
+    (val : Val α) →
+    Store Γ →
+    Store (Γ ,, α)
+
+store-lookup : ∀ {C} {Γ : Type-Context C} {α} → Store Γ → SSL-Var Γ α → Val α
+store-lookup {.(S _)} {.(_ ,, α)} {α} (Store-cons val store) SSL-Here = val
+store-lookup {.(S _)} {.(_ ,, _)} {α} (Store-cons val store) (SSL-There var) =
+  store-lookup store var
+
+-- data _S[_↦_]==_ : ∀ {C} {Γ : Type-Context C} → Store Γ → where
+--   -- Store-update-here 
 
 E-Store-ap : ∀ {C} {E} {Γ : Type-Context C} {Δ : E-Type-Context E} {α} → Store Γ → SSL-Expr Γ Δ α → SSL-Expr Γ Δ α
-E-Store-ap s e = V-subst (λ x → Lit (s x)) e
+E-Store-ap s e = V-subst (λ x → Lit (store-lookup s x)) e
 
 module Ambient-Context
   {C : SSL-Context}
@@ -290,7 +305,7 @@ module Ambient-Context
 
   data SSL-Expr-Val-⇓ (store : Store Γ) : ∀ {α} → SSL-Expr Γ Δ α → Val α → Set where
     SSL-Expr-Val-⇓-V : ∀ {α x} →
-      SSL-Expr-Val-⇓ store {α} (V x) (store x)
+      SSL-Expr-Val-⇓ store {α} (V x) (store-lookup store x)
     SSL-Expr-Val-⇓-Lit : ∀ {α v} →
       SSL-Expr-Val-⇓ store {α} (Lit v) v
 

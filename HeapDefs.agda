@@ -6,14 +6,26 @@ open import Data.Product
 open import Data.List.Relation.Unary.Any
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Relation.Nullary
+open import Data.Sum
 
 module HeapDefs
-  (Loc-Name)
+  (Loc-Name : Set)
+  -- (Loc-Name-eq-dec : ∀ (a b : Loc-Name) → (a ≡ b) ⊎ (a ≢ b))
   where
 
 data Loc : Set where
   Null : Loc
   mk-Loc : Loc-Name → ℕ → Loc
+
+-- Loc-eq-dec : ∀ (a b : Loc) → (a ≡ b) ⊎ (a ≢ b)
+-- Loc-eq-dec Null Null = inj₁ refl
+-- Loc-eq-dec Null (mk-Loc x x₁) = inj₂ (λ ())
+-- Loc-eq-dec (mk-Loc x x₁) Null = inj₂ (λ ())
+-- Loc-eq-dec (mk-Loc x y) (mk-Loc x′ y′) with y Data.Nat.≟ y′
+-- Loc-eq-dec (mk-Loc x y) (mk-Loc x′ y′) | no ¬p = inj₂ λ { _≡_.refl → ¬p refl }
+-- Loc-eq-dec (mk-Loc x y) (mk-Loc x′ y′) | yes refl with Loc-Name-eq-dec x x′
+-- Loc-eq-dec (mk-Loc x y) (mk-Loc x′ y) | yes refl | inj₁ refl = inj₁ refl
+-- Loc-eq-dec (mk-Loc x y) (mk-Loc x′ y) | yes refl | inj₂ y₁ = inj₂ λ { _≡_.refl → y₁ refl }
 
 data SSL-Type : Set where
   Loc-Type : SSL-Type
@@ -29,6 +41,24 @@ data Val : SSL-Type → Set where
 Heap : Set
 -- Heap = Loc → Maybe ℤ
 Heap = List (∃[ α ] (Loc × Val α))
+
+-- _[_↦_] : ∀ {α} → Heap → Loc → Val α → Heap
+-- _[_↦_] {α} [] loc val = (α , loc , val) ∷ []
+-- _[_↦_] {α} ((β , loc′ , val′) ∷ h) loc val with Loc-eq-dec loc′ loc
+-- ... | inj₁ refl = (α , loc , val) ∷ h
+-- ... | inj₂ y = h [ loc ↦ val ]
+
+-- -- Heap update
+data _[_↦_]==_ : ∀ {α} → Heap → Loc → Val α → Heap → Set where
+  Heap-update-[] : ∀ {α loc val} →
+    [] [ loc ↦ val ]== ((α , loc , val) ∷ [])
+
+  Heap-update-here : ∀ {α β loc val val′ rest} →
+    ((β , loc , val′) ∷ rest) [ loc ↦ val ]== ((α , loc , val) ∷ rest)
+
+  Heap-update-there : ∀ {α β loc loc′} {val : Val α} {val′ rest rest′} →
+    rest [ loc ↦ val ]== rest′ →
+    ((β , loc′ , val′) ∷ rest) [ loc ↦ val ]== ((β , loc′ , val′) ∷ rest′)
 
 data Dom : Heap → List Loc → Set where
   Dom-[] : Dom [] []
