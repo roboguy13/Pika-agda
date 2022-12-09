@@ -1,8 +1,15 @@
+-- Some simplifications:
+--   - Only functions on ADTs (not any one base types).
+--   - No guards
+--   - Every function is already fully instantiated
+
 open import Data.String
 open import Data.Integer
 open import Data.Bool
 open import Data.List
 open import Data.Product
+open import Data.Empty
+open import Data.Unit
 
 module Expr
   (Var-Name : Set)
@@ -10,31 +17,23 @@ module Expr
   (Pred-Name : Set)
   (Pred-Label : Set)
   (Loc-Name : Set)
+
+  (Layout-Name : Set)
+  (Constr-Name : Set)
+  (Adt-Name : Set)
+  (Fn-Name : Set)
   where
 
 open import SSL (Pred-Name) (Pred-Label) (Loc-Name)
-  renaming (Val to SSL-Val)
+open import HeapDefs (Loc-Name) renaming (Val to SSL-Val)
 
-record Layout-Name : Set where
-  field
-    name : String
-
-record Constr-Name : Set where
-  field
-    name : String
-
--- record SSL-Param : Set where
+-- record Layout-Name : Set where
 --   field
 --     name : String
 
--- data Type-0 : Set where
---   Int-Ty : Type-0
---   Bool-Ty : Type-0
---   Layout-Ty : Layout-Name → Type-0
-
--- data Type : Set where
---   Ty-0 : Type-0 → Type
---   Fn-Ty : Type-0 → Type → Type
+-- record Constr-Name : Set where
+--   field
+--     name : String
 
 data Type : Set where
   Int-Ty : Type
@@ -74,21 +73,18 @@ data Val : Type → Set where
   Val-Int : ℤ → Val Int-Ty
   Val-Bool : Bool → Val Bool-Ty
 
-data Sig : Set where
-  ε : Sig
-  _,_ : Type → Sig → Sig
+record Constr : Set where
+  field
+    name : Constr-Name
+    field-Γ : Context
+    -- field-types : List (∃[ α ] First-Order α)
+
+record Adt : Set where
+  field
+    name : Adt-Name
+    constrs : List Constr
 
 data Expr : {C : SSL-Context} → Type-Context C → Context → Type → Set
-
--- data Args (Γ : Context) : Sig → Set where
---   Args-ε : Args Γ ε
---   Args-cons : ∀ {α} →
---     Expr Γ α →
---     (sig : Sig) →
---     Args Γ (α , sig)
-
--- Args′ : Set
--- Args′ = ∃[ sig ] ∀ Γ → Args Γ sig
 
 data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
   Points-To : ∀ {α SSL-α} →
@@ -104,19 +100,73 @@ data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
     Expr Δ Γ (Layout-Ty n) →
     L-Heaplet Δ Γ
 
-record Layout-Branch : Set where
+record Layout-Branch (name : Layout-Name) (constr : Constr) : Set where
+  inductive
   field
-    name : Layout-Name
     ssl-C : SSL-Context
     ssl-Δ : Type-Context ssl-C
-    constr-name : Constr-Name
-    constr-param-Γ : Context
-    body : List (L-Heaplet ssl-Δ constr-param-Γ)
+    body : List (L-Heaplet ssl-Δ (Constr.field-Γ constr))
 
+data Layout-Branches (L-name : Layout-Name) : (adt : Adt) → Set where
+  Layout-Branches-[] : ∀ {name} →
+    Layout-Branches L-name (record { name = name ; constrs = [] })
 
+  Layout-Branches-cons : ∀ {name constr rest} →
+    Layout-Branch L-name constr →
+    Layout-Branches L-name (record { name = name ; constrs = rest }) →
+    Layout-Branches L-name (record { name = name ; constrs = constr ∷ rest })
 
--- Layout-Env : Set
--- Layout-Env = List (Layout-Name × SSL-Param × Constr-Name × Args′ × )
+data _LB∈_ : ∀ {L-name adt constr} → Layout-Branch L-name constr → Layout-Branches L-name adt → Set where
+  LB∈-here : ∀ {L-name adt constr} {branch : Layout-Branch L-name constr} {branches : Layout-Branches L-name adt} →
+    branch LB∈ (Layout-Branches-cons branch branches)
+
+  LB∈-there : ∀ {L-name adt constr constr′} {branch : Layout-Branch L-name constr} {branch′ : Layout-Branch L-name constr′} {branches : Layout-Branches L-name adt} →
+    branch LB∈ branches →
+    branch LB∈ (Layout-Branches-cons branch′ branches)
+
+record Layout : Set where
+  inductive
+  field
+    name : Layout-Name
+    adt : Adt
+    branches : Layout-Branches name adt
+
+data Args : Context → Set where
+  Args-∅ : Args ∅
+  Args-cons : ∀ {Γ₀ Γ α} →
+    Expr ε Γ₀ α →
+    Args Γ →
+    Args (Γ ,, α)
+
+record Fn-Branch (β : Type) (constr : Constr) : Set where
+  field
+    body : Expr ε (Constr.field-Γ constr) β
+
+data Fn-Branches (β : Type) : (adt : Adt) → Set where
+  Fn-Branches-[] : ∀ {name} →
+    Fn-Branches β (record { name = name ; constrs = [] })
+
+  Fn-Branches-cons : ∀ {name constr rest} →
+    Fn-Branch β constr →
+    Fn-Branches β (record { name = name ; constrs = rest }) →
+    Fn-Branches β (record { name = name ; constrs = constr ∷ rest })
+
+record Fn-Def : Set where
+  field
+    name : Fn-Name
+    arg-adt : Adt
+    β : Type
+    branches : Fn-Branches β arg-adt
+
+Layout-Env : Set
+Layout-Env = List Layout
+
+-- We only keep track of the function type info here to allow recursive function definitions
+Fn-Type-Env : Set
+Fn-Type-Env = List (Fn-Name × Layout × Layout)
+
+variable Global-Layout-Env : Layout-Env
+variable Global-Fn-Type-Env : Fn-Type-Env
 
 data Expr where
   V : ∀ {C} {Δ : Type-Context C} {Γ α} → Γ ∋ α → Expr Δ Γ α
@@ -151,7 +201,25 @@ data Expr where
     Expr ε Γ α →
     Expr ε Γ Bool-Ty
 
-  -- Lower : ∀ {Γ n sig} →
-  --   Constr-Name →
-  --   Args Γ sig →
-  --   Expr ε Γ (Layout-Ty n)
+  Lower : ∀ {Γ Γ₁ L-name ssl-α adt branches} →
+    (constr : Constr) →
+    (ssl-param : SSL-Var (ε ,, ssl-α) ssl-α) →
+    Args Γ₁ →
+
+    constr ∈ Adt.constrs adt →
+
+    ∀ {L-body : List (L-Heaplet (ε ,, ssl-α) (Constr.field-Γ constr))} →
+
+    let
+      branch : Layout-Branch L-name constr
+      branch = record { ssl-C = S Z ; ssl-Δ = (ε ,, ssl-α) ; body = L-body }
+    in
+    record { name = L-name ; adt = adt ; branches = branches } ∈ Global-Layout-Env →
+    branch LB∈ branches →
+
+    Expr ε Γ (Layout-Ty L-name)
+
+  -- NOTE: Function definitions are already fully instantiated
+  Apply : ∀ {f-name} {Γ A B} {arg : Expr ε Γ (Layout-Ty (Layout.name A))} →
+    (f-name , A , B) ∈ Global-Fn-Type-Env →
+    Expr ε Γ (Fn-Ty (Layout-Ty (Layout.name A)) (Layout-Ty (Layout.name B)))

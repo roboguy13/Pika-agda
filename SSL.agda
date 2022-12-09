@@ -21,6 +21,8 @@ module SSL
   (Loc-Name : Set)
   where
 
+open import HeapDefs (Loc-Name)
+
 -- infix  4 _⊨[_]_
 infixl 5  _,,_
 
@@ -38,10 +40,6 @@ Pred-Name-label = proj₂
 --     name : Loc-Name
 --     ix : ℕ
 
-data Loc : Set where
-  Null : Loc
-  mk-Loc : Loc-Name → ℕ → Loc
-
 Loc-incr : Loc → ℕ → Loc
 Loc-incr Null i = Null
 Loc-incr (mk-Loc x x₁) i = mk-Loc x (x₁ Data.Nat.+ i)
@@ -53,17 +51,6 @@ data SSL-Context : Set where
 
 -- data Ixed A : Set where
 --   [_:+_] : A → ℕ → Ixed A
-
-data SSL-Type : Set where
-  Loc-Type : SSL-Type
-  Int-Type : SSL-Type
-  Bool-Type : SSL-Type
-  -- Exists-Type : SSL-Type → SSL-Type
-
-data Val : SSL-Type → Set where
-  Val-Loc : Loc → Val Loc-Type
-  Val-Int : ℤ → Val Int-Type
-  Val-Bool : Bool → Val Bool-Type
 
 data Exist-Context : Set where
   Exist-Z : Exist-Context
