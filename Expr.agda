@@ -117,8 +117,7 @@ data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
 -- A heaplet with no applications and all RHS's are base values
 data Val-Heaplet : Set where
   Val-Points-To : ∀ {α} →
-    Loc → Val α →
-    Base-Type α →
+    Loc → SSL-Val α →
     Val-Heaplet
 
 
@@ -166,6 +165,16 @@ data Args : Context → Set where
     Expr ε Γ₀ α →
     Args Γ →
     Args (Γ ,, α)
+
+-- Give a SuSLik variable for each fun-SuSLik variable in the given context. The
+-- SuSLik variables are from SuSLik context Δ
+data SSL-Vars {C} (Δ : Type-Context C) : Context → Set where
+  SSL-Vars-∅ : SSL-Vars Δ ∅
+  SSL-Vars-cons : ∀ {Γ α ssl-α} →
+    To-SSL-Type α ssl-α →
+    SSL-Var Δ ssl-α →
+    SSL-Vars Δ Γ →
+    SSL-Vars Δ (Γ ,, α)
 
 record Fn-Branch (β : Type) (constr : Constr) : Set where
   field
