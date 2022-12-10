@@ -4,6 +4,7 @@ open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.Sum
 open import Data.Bool
 open import Data.Integer
+open import Data.Product
 
 module AbstractMachine
   (Pred-Name : Set)
@@ -61,10 +62,6 @@ data Val-Layout-Body-Act :
     Val-Layout-Body-Act
       (Val-Points-To lhs rhs ∷ rest)
       h h′′
-
-
--- _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set
--- Δ ↣ Δ′ = {!!}
 
 data _⟶_ {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-Context C′} {α} →
   (Expr Δ Γ α × Fs-Store Γ × Store Δ × Heap) →
@@ -161,7 +158,7 @@ data _⟶_ {C} {Δ} {Γ} where
     (Expr-weaken-Δ Δ↣Δ′ y , fs-store , store′ , h) ⟶ (Ctx-extension-there Δ′↣Δ′′ , Int-Type , Store-cons (Val-Int y-val) store′′ , h , SSL-Here) →
     (Add x y , fs-store , store , h) ⟶ (Ctx-extension-there (Δ′↣Δ′′ C∘ Δ↣Δ′) , Int-Type , Store-cons (Val-Int (x-val + y-val)) store′′ , h , SSL-Here)
 
-  AM-Lower-1 : ∀ {fs-store : Fs-Store Γ}
+  AM-Lower : ∀ {fs-store : Fs-Store Γ}
                  {h : Heap}
                  {L-name adt branches} →
     {constr : Constr} →
@@ -195,7 +192,7 @@ data _⟶_ {C} {Δ} {Γ} where
       store′′ = Store-cons (Val-Loc ℓ) store′
     in
 
-    ∀ {args-fs-store} {val-layout-body} {h′′}→
+    ∀ {args-fs-store} {val-layout-body} {h′′} →
     SSL-Vars→Fs-Store store′ vars args-fs-store →
     Eval-Layout-Body args-fs-store (Store-cons (Val-Loc ℓ) Store-[]) h′ L-body val-layout-body →
     Val-Layout-Body-Act val-layout-body h′ h′′ →
@@ -205,3 +202,34 @@ data _⟶_ {C} {Δ} {Γ} where
     (Lower constr ssl-param constr-prf args layout-prf branch-prf , fs-store , store , h)
       ⟶
     (Ctx-extension-there Δ↣Δ′ , Loc-Type , store′′ , h′′ , SSL-Here)
+
+  -- {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-Context C′} {α} →
+  -- (Expr Δ Γ α × Fs-Store Γ × Store Δ × Heap) →
+  -- (Δ ↣ Δ′ × ∃[ ssl-α ] Store Δ′ × Heap × SSL-Var Δ′ ssl-α)
+progress : ∀ {α ssl-α} → (e : Expr ε ∅ α) →
+  To-SSL-Type α ssl-α →
+  Σ SSL-Context λ C →
+  Σ (Type-Context C) λ Δ →
+  Σ (ε ↣ Δ) λ ext →
+  Σ (Store Δ) λ store →
+  Σ Heap λ h →
+  ∃[ var ]
+    ((e , Fs-Store-∅ , Store-[] , []) ⟶ (ext , ssl-α , store , h , var ))
+progress {α} {ssl-α} (Lit x) ssl-type-prf =
+  let
+    ssl-val : SSL-Val ssl-α
+    ssl-val = {!!}
+  in
+  S Z ,
+  (ε ,, ssl-α) ,
+  Ctx-extension-there Ctx-extension-here ,
+  Store-cons ssl-val Store-[] ,
+  [] ,
+  SSL-Here ,
+  AM-Lit {!!}
+progress {.Int-Ty} {ssl-α} (Add e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+progress {.Int-Ty} {ssl-α} (Sub e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+progress {.Bool-Ty} {ssl-α} (And e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+progress {.Bool-Ty} {ssl-α} (Not e) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+progress {.Bool-Ty} {ssl-α} (Equal e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+progress {.(Layout-Ty _)} {ssl-α} (Lower constr ssl-param x x₁ x₂ x₃) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
