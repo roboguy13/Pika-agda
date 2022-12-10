@@ -101,10 +101,9 @@ record Adt : Set where
 data Expr : {C : SSL-Context} → Type-Context C → Context → Type → Set
 
 data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
-  Points-To : ∀ {α SSL-α} →
-    SSL-Expr Δ ε SSL-α → Expr Δ Γ α →
+  Points-To : ∀ {α} →
+    SSL-Expr Δ ε Loc-Type → Expr Δ Γ α →
     Base-Type α →
-    To-SSL-Type α SSL-α →
     L-Heaplet Δ Γ
 
   -- NOTE: No mutually recursive layout definitions, for now
@@ -114,15 +113,15 @@ data L-Heaplet {C} (Δ : Type-Context C) (Γ : Context) : Set where
     Expr Δ Γ (Layout-Ty n) →
     L-Heaplet Δ Γ
 
+
+Layout-Body : ∀ {C} (Δ : Type-Context C) (Γ : Context) → Set
+Layout-Body Δ Γ = List (L-Heaplet Δ Γ)
+
 -- A heaplet with no applications and all RHS's are base values
 data Val-Heaplet : Set where
   Val-Points-To : ∀ {α} →
     Loc → SSL-Val α →
     Val-Heaplet
-
-
-Layout-Body : ∀ {C} (Δ : Type-Context C) (Γ : Context) → Set
-Layout-Body Δ Γ = List (L-Heaplet Δ Γ)
 
 -- Gotten by applying a layout to value arguments
 Val-Layout-Body : Set
@@ -161,8 +160,8 @@ record Layout : Set where
 
 data Args : Context → Set where
   Args-∅ : Args ∅
-  Args-cons : ∀ {Γ₀ Γ α} →
-    Expr ε Γ₀ α →
+  Args-cons : ∀ {C} {Δ : Type-Context C} {Γ₀ Γ α} →
+    Expr Δ Γ₀ α →
     Args Γ →
     Args (Γ ,, α)
 
@@ -216,28 +215,33 @@ data Expr where
     Expr Δ Γ α
 
   Add : ∀ {Γ} →
-    Expr ε Γ Int-Ty →
-    Expr ε Γ Int-Ty →
-    Expr ε Γ Int-Ty
+    ∀ {C} {Δ : Type-Context C} →
+    Expr Δ Γ Int-Ty →
+    Expr Δ Γ Int-Ty →
+    Expr Δ Γ Int-Ty
 
   Sub : ∀ {Γ} →
-    Expr ε Γ Int-Ty →
-    Expr ε Γ Int-Ty →
-    Expr ε Γ Int-Ty
+    ∀ {C} {Δ : Type-Context C} →
+    Expr Δ Γ Int-Ty →
+    Expr Δ Γ Int-Ty →
+    Expr Δ Γ Int-Ty
 
   And : ∀ {Γ} →
-    Expr ε Γ Bool-Ty →
-    Expr ε Γ Bool-Ty →
-    Expr ε Γ Bool-Ty
+    ∀ {C} {Δ : Type-Context C} →
+    Expr Δ Γ Bool-Ty →
+    Expr Δ Γ Bool-Ty →
+    Expr Δ Γ Bool-Ty
 
   Not : ∀ {Γ} →
-    Expr ε Γ Bool-Ty →
-    Expr ε Γ Bool-Ty
+    ∀ {C} {Δ : Type-Context C} →
+    Expr Δ Γ Bool-Ty →
+    Expr Δ Γ Bool-Ty
 
   Equal : ∀ {Γ α} →
-    Expr ε Γ α →
-    Expr ε Γ α →
-    Expr ε Γ Bool-Ty
+    ∀ {C} {Δ : Type-Context C} →
+    Expr Δ Γ α →
+    Expr Δ Γ α →
+    Expr Δ Γ Bool-Ty
 
   Lower : ∀ {Γ L-name ssl-α adt branches} →
     (constr : Constr) →
@@ -255,12 +259,52 @@ data Expr where
     record { name = L-name ; adt = adt ; branches = branches } ∈ Global-Layout-Env →
     branch LB∈ branches →
 
-    Expr ε Γ (Layout-Ty L-name)
+    ∀ {C} {Δ : Type-Context C} →
+    Expr Δ Γ (Layout-Ty L-name)
 
   -- NOTE: Function definitions are already fully instantiated
-  Apply : ∀ {f-name} {Γ A B} {arg : Expr ε Γ (Layout-Ty (Layout.name A))} →
+  Apply : ∀ f-name {Γ A B} (arg : Expr ε Γ (Layout-Ty (Layout.name A))) →
+    ∀ {C} {Δ : Type-Context C} →
     (f-name , A , B) ∈ Global-Fn-Type-Env →
-    Expr ε Γ (Fn-Ty (Layout-Ty (Layout.name A)) (Layout-Ty (Layout.name B)))
+    Expr Δ Γ (Fn-Ty (Layout-Ty (Layout.name A)) (Layout-Ty (Layout.name B)))
+
+-- Inclusion map between contexts
+data _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set where
+  Ctx-extension-here : ∀ {C} {Δ : Type-Context C} → Δ ↣ Δ
+  Ctx-extension-there : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {α} →
+    Δ ↣ Δ′ →
+    Δ ↣ (Δ′ ,, α)
+
+-- Action of context inclusion maps on variables
+apply-ctx-extension : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {α} →
+  Δ ↣ Δ′ →
+  SSL-Var Δ α → SSL-Var Δ′ α
+apply-ctx-extension Ctx-extension-here var = var
+apply-ctx-extension (Ctx-extension-there prf) var = SSL-There (apply-ctx-extension prf var)
+
+-- Composition of context inclusion maps
+_C∘_ : ∀ {C C′ C′′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Δ′′ : Type-Context C′′} →
+  (Δ′ ↣ Δ′′) →
+  (Δ ↣ Δ′) →
+  (Δ ↣ Δ′′)
+Ctx-extension-here C∘ Ctx-extension-here = Ctx-extension-here
+Ctx-extension-here C∘ Ctx-extension-there prf-2 = Ctx-extension-there prf-2
+Ctx-extension-there prf-1 C∘ prf-2 = Ctx-extension-there (prf-1 C∘ prf-2)
+
+Expr-weaken-Δ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Γ} {α} →
+  Δ ↣ Δ′ →
+  Expr Δ Γ α →
+  Expr Δ′ Γ α
+Expr-weaken-Δ prf (V x) = V x
+Expr-weaken-Δ prf (Lit x) = Lit x
+Expr-weaken-Δ prf (SSL-V x x₁) = SSL-V (apply-ctx-extension prf x) x₁
+Expr-weaken-Δ prf (Add e e₁) = Add (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
+Expr-weaken-Δ prf (Sub e e₁) = Sub (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
+Expr-weaken-Δ prf (And e e₁) = And (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
+Expr-weaken-Δ prf (Not e) = Not (Expr-weaken-Δ prf e)
+Expr-weaken-Δ prf (Equal {_} {β} e e₁) = Equal {_} {β} (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
+Expr-weaken-Δ prf (Lower constr ssl-param x x₁ x₂ x₃) = Lower constr ssl-param x x₁ x₂ x₃
+Expr-weaken-Δ prf (Apply f {_} {A} {B} arg prf-2) = Apply f {_} {A} {B} arg prf-2
 
 data Fs-Store : Context → Set where
   Fs-Store-∅ : Fs-Store ∅
@@ -272,6 +316,30 @@ data Fs-Store : Context → Set where
 fs-store-lookup : ∀ {Γ α} → Fs-Store Γ → Γ ∋ α → Val α
 fs-store-lookup (Fs-Store-cons x store) Here = x
 fs-store-lookup (Fs-Store-cons x store) (There var) = fs-store-lookup store var
+
+-- data SSL-Vars {C} (Δ : Type-Context C) : Context → Set where
+--   SSL-Vars-∅ : SSL-Vars Δ ∅
+--   SSL-Vars-cons : ∀ {Γ α ssl-α} →
+--     To-SSL-Type α ssl-α →
+--     SSL-Var Δ ssl-α →
+--     SSL-Vars Δ Γ →
+--     SSL-Vars Δ (Γ ,, α)
+
+-- data SSL-Vars→Store {C} {Δ : Type-Context C}  : ∀ {C′}  {Δ′ : Type-Context C′} {Γ} (store : Store Δ) → SSL-Vars Δ Γ → Store Δ′ → Set where
+--   SSL-Vars→Store-∅ : ∀ {store} → SSL-Vars→Store store SSL-Vars-∅ Store-[]
+--   SSL-Vars→Store-cons : ∀ {C′} {Δ′} {Γ α} {ssl-α} {store} {ssl-prf : To-SSL-Type α ssl-α} {var : SSL-Var Δ ssl-α} {rest} {rest′} →
+--     SSL-Vars→Store {C} {Δ} {C′} {Δ′} {Γ} store rest rest′ →
+--     SSL-Vars→Store store (SSL-Vars-cons ssl-prf var rest) (Store-cons (store-lookup store var) rest′)
+
+
+data SSL-Vars→Fs-Store : ∀ {C} {Δ : Type-Context C} {Γ} (store : Store Δ) → SSL-Vars Δ Γ → Fs-Store Γ → Set where
+  SSL-Vars→Fs-Store-∅ : ∀ {C} {Δ : Type-Context C} {store} → SSL-Vars→Fs-Store {C} {Δ} store SSL-Vars-∅ Fs-Store-∅
+  SSL-Vars→Fs-Store-cons : ∀ {C} {Δ : Type-Context C} {Γ α} {ssl-α} {store} {ssl-prf : To-SSL-Type α ssl-α} {var : SSL-Var Δ ssl-α} {rest} {rest′}
+                             {val} →
+    SSL-Vars→Fs-Store {C} {Δ} {Γ} store rest rest′ →
+    To-SSL-Val val (store-lookup store var) →
+    (prf : To-SSL-Type α ssl-α) →
+    SSL-Vars→Fs-Store store (SSL-Vars-cons prf var rest) (Fs-Store-cons val rest′)
 
 data Fs-Store-app : ∀ {Γ Γ′ Γ′′} → Fs-Store Γ → Fs-Store Γ′ → Fs-Store Γ′′ → Set where
   Fs-Store-app-∅ : ∀ {Γ} {store : Fs-Store Γ} → Fs-Store-app Fs-Store-∅ store store

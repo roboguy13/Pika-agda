@@ -66,31 +66,8 @@ data Val-Layout-Body-Act :
 -- _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set
 -- Δ ↣ Δ′ = {!!}
 
--- Inclusion map between contexts
-data _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set where
-  Ctx-extension-here : ∀ {C} {Δ : Type-Context C} → Δ ↣ Δ
-  Ctx-extension-there : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {α} →
-    Δ ↣ Δ′ →
-    Δ ↣ (Δ′ ,, α)
-
--- Action of context inclusion maps on variables
-apply-ctx-extension : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {α} →
-  Δ ↣ Δ′ →
-  SSL-Var Δ α → SSL-Var Δ′ α
-apply-ctx-extension Ctx-extension-here var = var
-apply-ctx-extension (Ctx-extension-there prf) var = SSL-There (apply-ctx-extension prf var)
-
--- Composition of context inclusion maps
-_C∘_ : ∀ {C C′ C′′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Δ′′ : Type-Context C′′} →
-  (Δ′ ↣ Δ′′) →
-  (Δ ↣ Δ′) →
-  (Δ ↣ Δ′′)
-Ctx-extension-here C∘ Ctx-extension-here = Ctx-extension-here
-Ctx-extension-here C∘ Ctx-extension-there prf-2 = Ctx-extension-there prf-2
-Ctx-extension-there prf-1 C∘ prf-2 = Ctx-extension-there (prf-1 C∘ prf-2)
-
 data _⟶_ {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-Context C′} {α} →
-  (Expr ε Γ α × Fs-Store Γ × Store Δ × Heap) →
+  (Expr Δ Γ α × Fs-Store Γ × Store Δ × Heap) →
   (Δ ↣ Δ′ × ∃[ ssl-α ] Store Δ′ × Heap × SSL-Var Δ′ ssl-α) → Set
 
 -- Transition relation extended to lists of expressions
@@ -99,10 +76,10 @@ data Args-transition {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-C
   (Δ ↣ Δ′ × Store Δ′ × Heap × SSL-Vars Δ′ Γ′) → Set where
 
   Args-transition-[] : ∀ {fs-store store h} →
-    Args-transition (Args-∅ , fs-store , store , h) ({!!} , store , h , SSL-Vars-∅)
+    Args-transition (Args-∅ , fs-store , store , h) (Ctx-extension-here , store , h , SSL-Vars-∅)
 
   Args-transition-cons : ∀ {Γ′} {α ssl-α}
-                           {arg : Expr ε Γ α}
+                           {arg : Expr Δ Γ α}
                            {args : Args Γ′}
                            {h h′ h′′}
                            {C′ C′′}
@@ -119,19 +96,31 @@ data Args-transition {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-C
     Args-transition (args , fs-store , store′ , h′) (Δ′↣Δ′′ , store′′ , h′′ , args-vs) →
     Args-transition (Args-cons arg args , fs-store , store , h) (Δ′↣Δ′′ C∘ Δ↣Δ′ , store′′ , h′′ , SSL-Vars-cons to-ssl (apply-ctx-extension (Δ′↣Δ′′) arg-v) args-vs)
 
-data Eval-Layout-Body {C} {Δ : Type-Context C} {Γ} (store : Fs-Store Γ) :
+data Eval-Layout-Body {C} {Δ : Type-Context C} {Γ} (fs-store : Fs-Store Γ) (store : Store Δ) (h : Heap) :
      Layout-Body Δ Γ → Val-Layout-Body → Set where
-  Eval-Layout-Body-[] : Eval-Layout-Body store [] []
+  Eval-Layout-Body-[] : Eval-Layout-Body fs-store store h [] []
 
-  Eval-Layout-Body-Points-To : ∀ {α ssl-α} {rest rest′}
-                             {lhs : SSL-Expr Δ ε ssl-α} {rhs : Expr Δ Γ α}
-                             {lhs-val} {rhs-val} →
+  Eval-Layout-Body-Points-To : ∀ {α ssl-α}
+                             {lhs : SSL-Expr Δ ε Loc-Type} {rhs : Expr Δ Γ α}
+                             {C′} {Δ′ : Type-Context C′}
+                             {Δ↣Δ′ : Δ ↣ Δ′}
+                             {store′ : Store Δ′}
+                             {h′}
+                             {rest rest′}
+                             {lhs-val}
+                             {rhs-var : SSL-Var Δ′ ssl-α} →
     (α-base : Base-Type α) →
     (ssl-prf : To-SSL-Type α ssl-α) →
-    -- ({!!} , {!!} , {!!}) ⟶ (Store-cons {!!} {!!} , {!!}) →
-    Eval-Layout-Body store
-      (Points-To lhs rhs α-base ssl-prf ∷ rest)
-      (Val-Points-To rhs-val lhs-val ∷ rest′)
+    (rhs , fs-store , store , h) ⟶ (Δ↣Δ′ , ssl-α , store′ , h′ , rhs-var) →
+    SSL-Expr-Val-⇓ Δ ε store lhs (Val-Loc lhs-val) →
+    Eval-Layout-Body fs-store store h rest rest′ →  -- Should this use store′ and h′?
+    Eval-Layout-Body fs-store store h
+      (Points-To lhs rhs α-base ∷ rest)
+      (Val-Points-To lhs-val (store-lookup store′ rhs-var) ∷ rest′)
+
+  Eval-Layout-Body-Ap : ∀ {rest : Layout-Body Δ Γ} {rest′ : Val-Layout-Body} {SSL-α} {n : Layout-Name} {v : SSL-Var Δ SSL-α} {e : Expr Δ Γ (Layout-Ty n)} →
+    Eval-Layout-Body fs-store store h rest rest′ →
+    Eval-Layout-Body fs-store store h (Ap n v e ∷ rest) rest′
 
 -- Transition relation for one expression
 data _⟶_ {C} {Δ} {Γ} where
@@ -164,26 +153,27 @@ data _⟶_ {C} {Δ} {Γ} where
              {store′ : Store Δ′}
              {store′′ : Store Δ′′}
              {h}
-             {x y : Expr ε Γ Int-Ty}
+             {x : Expr Δ Γ Int-Ty}
+             {y : Expr Δ Γ Int-Ty}
              {x-val y-val}
              {Δ↣Δ′} {Δ′↣Δ′′}→
     (x , fs-store , store , h) ⟶ (Ctx-extension-there Δ↣Δ′ , Int-Type , Store-cons (Val-Int x-val) store′ , h , SSL-Here) →
-    (y , fs-store , store′ , h) ⟶ (Ctx-extension-there Δ′↣Δ′′ , Int-Type , Store-cons (Val-Int y-val) store′′ , h , SSL-Here) →
+    (Expr-weaken-Δ Δ↣Δ′ y , fs-store , store′ , h) ⟶ (Ctx-extension-there Δ′↣Δ′′ , Int-Type , Store-cons (Val-Int y-val) store′′ , h , SSL-Here) →
     (Add x y , fs-store , store , h) ⟶ (Ctx-extension-there (Δ′↣Δ′′ C∘ Δ↣Δ′) , Int-Type , Store-cons (Val-Int (x-val + y-val)) store′′ , h , SSL-Here)
 
   AM-Lower-1 : ∀ {fs-store : Fs-Store Γ}
                  {h : Heap}
-                 {L-name ssl-α adt branches} →
+                 {L-name adt branches} →
     {constr : Constr} →
-    {ssl-param : SSL-Var (ε ,, ssl-α) ssl-α} →
+    {ssl-param : SSL-Var (ε ,, Loc-Type) Loc-Type} →
     (constr-prf : constr ∈ Adt.constrs adt) →
     (args : Args (Constr.field-Γ constr)) →
 
-    ∀ {L-body : List (L-Heaplet (ε ,, ssl-α) (Constr.field-Γ constr))} →
+    ∀ {L-body : Layout-Body (ε ,, Loc-Type) (Constr.field-Γ constr)} →
 
     let
       branch : Layout-Branch L-name constr
-      branch = record { ssl-C = S Z ; ssl-Δ = (ε ,, ssl-α) ; body = L-body }
+      branch = record { ssl-C = S Z ; ssl-Δ = (ε ,, Loc-Type) ; body = L-body }
     in
     (layout-prf : record { name = L-name ; adt = adt ; branches = branches } ∈ Global-Layout-Env) →
     (branch-prf : branch LB∈ branches) →
@@ -193,8 +183,10 @@ data _⟶_ {C} {Δ} {Γ} where
     ∀ {store : Store Δ} →
 
     ∀ {C′} {Δ′ : Type-Context C′} {store′ : Store Δ′}
-      {h′} →
-    Args-transition (args , fs-store , store , h) ({!!} , store′ , h′) →
+      {h′}
+      {vars}
+      {Δ↣Δ′} →
+    Args-transition (args , fs-store , store , h) (Δ↣Δ′ , store′ , h′ , vars) →
 
     ∀ {ℓ} →
     ℓ # h →
@@ -203,11 +195,13 @@ data _⟶_ {C} {Δ} {Γ} where
       store′′ = Store-cons (Val-Loc ℓ) store′
     in
 
-    ∀ {h′} →
-    Val-Layout-Body-Act {!!} h h′ →
+    ∀ {args-fs-store} {val-layout-body} {h′′}→
+    SSL-Vars→Fs-Store store′ vars args-fs-store →
+    Eval-Layout-Body args-fs-store (Store-cons (Val-Loc ℓ) Store-[]) h′ L-body val-layout-body →
+    Val-Layout-Body-Act val-layout-body h′ h′′ →
 
     -------
 
     (Lower constr ssl-param constr-prf args layout-prf branch-prf , fs-store , store , h)
       ⟶
-    ({!!} , {!!} , store′′ , {!!})
+    (Ctx-extension-there Δ↣Δ′ , Loc-Type , store′′ , h′′ , SSL-Here)
