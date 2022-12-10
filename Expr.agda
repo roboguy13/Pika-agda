@@ -61,6 +61,12 @@ data Context : Set where
   ∅ : Context
   _,,_ : Context → Type → Context
 
+data Context-app : Context → Context → Context → Set where
+  Context-app-∅ : ∀ {Γ} → Context-app Γ ∅ Γ
+  Context-app-cons : ∀ {Γ₁ Γ₂ Γ′ α} →
+    Context-app Γ₁ Γ₂ Γ′ →
+    Context-app Γ₁ (Γ₂ ,, α) (Γ′ ,, α)
+
 data _∋_ : Context → Type → Set where
   Here : ∀ {Γ α} → (Γ ,, α) ∋ α
   There : ∀ {Γ α β} →
@@ -224,12 +230,12 @@ data Expr where
     Expr ε Γ α →
     Expr ε Γ Bool-Ty
 
-  Lower : ∀ {Γ Γ₁ L-name ssl-α adt branches} →
+  Lower : ∀ {Γ L-name ssl-α adt branches} →
     (constr : Constr) →
     (ssl-param : SSL-Var (ε ,, ssl-α) ssl-α) →
-    Args Γ₁ →
 
     constr ∈ Adt.constrs adt →
+    Args (Constr.field-Γ constr) →
 
     ∀ {L-body : List (L-Heaplet (ε ,, ssl-α) (Constr.field-Γ constr))} →
 
@@ -253,6 +259,17 @@ data Fs-Store : Context → Set where
     Val α →
     Fs-Store Γ →
     Fs-Store (Γ ,, α)
+
+fs-store-lookup : ∀ {Γ α} → Fs-Store Γ → Γ ∋ α → Val α
+fs-store-lookup (Fs-Store-cons x store) Here = x
+fs-store-lookup (Fs-Store-cons x store) (There var) = fs-store-lookup store var
+
+data Fs-Store-app : ∀ {Γ Γ′ Γ′′} → Fs-Store Γ → Fs-Store Γ′ → Fs-Store Γ′′ → Set where
+  Fs-Store-app-∅ : ∀ {Γ} {store : Fs-Store Γ} → Fs-Store-app Fs-Store-∅ store store
+  Fs-Store-app-cons : ∀ {Γ Γ′ Γ′′} {α}
+                        {store-1 : Fs-Store Γ} {store-2 : Fs-Store Γ′} {store′ : Fs-Store Γ′′} {val : Val α} →
+    Fs-Store-app store-1 store-2 store′ →
+    Fs-Store-app (Fs-Store-cons val store-1) store-2 (Fs-Store-cons val store′)
 
 data To-SSL-Context : ∀ {C} → Context → Type-Context C → Set where
   To-SSL-Context-Z : To-SSL-Context ∅ ε
