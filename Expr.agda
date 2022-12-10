@@ -10,6 +10,7 @@ open import Data.List
 open import Data.Product
 open import Data.Empty
 open import Data.Unit
+open import Relation.Binary.PropositionalEquality hiding ([_])
 
 module Expr
   (Pred-Name : Set)
@@ -86,6 +87,10 @@ data Val : Type → Set where
 data To-SSL-Val : ∀ {α ssl-α} → Val α → SSL-Val ssl-α → Set where
   To-SSL-Val-Int : ∀ {i} → To-SSL-Val (Val-Int i) (Val-Int i)
   To-SSL-Val-Bool : ∀ {b} → To-SSL-Val (Val-Bool b) (Val-Bool b)
+
+to-SSL-Val : ∀ {α ssl-α} → To-SSL-Type α ssl-α → (val : Val α) → ∃[ ssl-val ] To-SSL-Val {α} {ssl-α} val ssl-val
+to-SSL-Val To-SSL-Type-Int (Val-Int x) = Val-Int x , To-SSL-Val-Int
+to-SSL-Val To-SSL-Type-Bool (Val-Bool x) = Val-Bool x , To-SSL-Val-Bool
 
 record Constr : Set where
   field
@@ -306,6 +311,10 @@ Expr-weaken-Δ prf (Equal {_} {β} e e₁) = Equal {_} {β} (Expr-weaken-Δ prf 
 Expr-weaken-Δ prf (Lower constr ssl-param x x₁ x₂ x₃) = Lower constr ssl-param x x₁ x₂ x₃
 Expr-weaken-Δ prf (Apply f {_} {A} {B} arg prf-2) = Apply f {_} {A} {B} arg prf-2
 
+ε↣Δ : ∀ {C} {Δ : Type-Context C} → ε ↣ Δ
+ε↣Δ {.Z} {ε} = Ctx-extension-here
+ε↣Δ {.(S _)} {Δ ,, x} = Ctx-extension-there ε↣Δ
+
 data Fs-Store : Context → Set where
   Fs-Store-∅ : Fs-Store ∅
   Fs-Store-cons : ∀ {Γ α} →
@@ -373,3 +382,16 @@ data To-Store : ∀ {C} {Δ : Type-Context C} {Γ} → Fs-Store Γ → Store Δ 
 -- ... | n , Δ = S n , ({!!} ,, to-SSL
 
 -- Fs-Store→Store : Fs-Store Γ → 
+
+Lit-has-Base-Type : ∀ {C} {Δ : Type-Context C} {Γ} {α} (x : Val α) (e : Expr Δ Γ α) → e ≡ Lit x → Base-Type α
+Lit-has-Base-Type (Val-Int x) .(Lit (Val-Int x)) refl = Base-Type-Int
+Lit-has-Base-Type (Val-Bool x) .(Lit (Val-Bool x)) refl = Base-Type-Bool
+
+Base-Type-to-SSL : ∀ {α} → Base-Type α → ∃[ ssl-α ] To-SSL-Type α ssl-α
+Base-Type-to-SSL Base-Type-Int = Int-Type , To-SSL-Type-Int
+Base-Type-to-SSL Base-Type-Bool = Bool-Type , To-SSL-Type-Bool
+
+to-SSL-Type-unique : ∀ {α ssl-α-1 ssl-α-2} → To-SSL-Type α ssl-α-1 → To-SSL-Type α ssl-α-2 → ssl-α-1 ≡ ssl-α-2
+to-SSL-Type-unique To-SSL-Type-Int To-SSL-Type-Int = refl
+to-SSL-Type-unique To-SSL-Type-Bool To-SSL-Type-Bool = refl
+to-SSL-Type-unique To-SSL-Type-Layout To-SSL-Type-Layout = refl

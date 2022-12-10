@@ -5,6 +5,7 @@ open import Data.Sum
 open import Data.Bool
 open import Data.Integer
 open import Data.Product
+open import Function using (case_of_)
 
 module AbstractMachine
   (Pred-Name : Set)
@@ -152,11 +153,15 @@ data _⟶_ {C} {Δ} {Γ} where
              {h}
              {x : Expr Δ Γ Int-Ty}
              {y : Expr Δ Γ Int-Ty}
+             {x-var y-var}
              {x-val y-val}
+             {h′ h′′}
              {Δ↣Δ′} {Δ′↣Δ′′}→
-    (x , fs-store , store , h) ⟶ (Ctx-extension-there Δ↣Δ′ , Int-Type , Store-cons (Val-Int x-val) store′ , h , SSL-Here) →
-    (Expr-weaken-Δ Δ↣Δ′ y , fs-store , store′ , h) ⟶ (Ctx-extension-there Δ′↣Δ′′ , Int-Type , Store-cons (Val-Int y-val) store′′ , h , SSL-Here) →
-    (Add x y , fs-store , store , h) ⟶ (Ctx-extension-there (Δ′↣Δ′′ C∘ Δ↣Δ′) , Int-Type , Store-cons (Val-Int (x-val + y-val)) store′′ , h , SSL-Here)
+    (x , fs-store , store , h) ⟶ (Δ↣Δ′ , Int-Type , store′ , h′ , x-var) →
+    (y , fs-store , store , h′) ⟶ (Δ′↣Δ′′ , Int-Type , store′′ , h′′ , y-var) →
+    Val-Int x-val ≡ store-lookup store′ x-var →
+    Val-Int y-val ≡ store-lookup store′′ y-var →
+    (Add x y , fs-store , store , h) ⟶ (Ctx-extension-there Ctx-extension-here , Int-Type , Store-cons (Val-Int (x-val + y-val)) store , h′′ , SSL-Here)
 
   AM-Lower : ∀ {fs-store : Fs-Store Γ}
                  {h : Heap}
@@ -206,28 +211,44 @@ data _⟶_ {C} {Δ} {Γ} where
   -- {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-Context C′} {α} →
   -- (Expr Δ Γ α × Fs-Store Γ × Store Δ × Heap) →
   -- (Δ ↣ Δ′ × ∃[ ssl-α ] Store Δ′ × Heap × SSL-Var Δ′ ssl-α)
-progress : ∀ {α ssl-α} → (e : Expr ε ∅ α) →
+progress : ∀ {α ssl-α h store} → (e : Expr ε ∅ α) →
   To-SSL-Type α ssl-α →
   Σ SSL-Context λ C →
   Σ (Type-Context C) λ Δ →
   Σ (ε ↣ Δ) λ ext →
-  Σ (Store Δ) λ store →
-  Σ Heap λ h →
+  Σ (Store Δ) λ store′ →
+  Σ Heap λ h′ →
   ∃[ var ]
-    ((e , Fs-Store-∅ , Store-[] , []) ⟶ (ext , ssl-α , store , h , var ))
-progress {α} {ssl-α} (Lit x) ssl-type-prf =
+    ((e , Fs-Store-∅ , store , h) ⟶ (ext , ssl-α , store′ , h′ , var ))
+progress {α} {ssl-α} {h} {store} (Lit x) ssl-type-prf =
   let
-    ssl-val : SSL-Val ssl-α
-    ssl-val = {!!}
+    ssl-val , ssl-prf = (to-SSL-Val ssl-type-prf x)
+
   in
   S Z ,
   (ε ,, ssl-α) ,
   Ctx-extension-there Ctx-extension-here ,
-  Store-cons ssl-val Store-[] ,
-  [] ,
+  Store-cons ssl-val store ,
+  h ,
   SSL-Here ,
-  AM-Lit {!!}
-progress {.Int-Ty} {ssl-α} (Add e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+  AM-Lit ssl-prf
+  
+progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int
+  with progress x To-SSL-Type-Int
+progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition with progress y To-SSL-Type-Int
+progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition
+                                                                     | y-C , y-Δ , y-ext , y-store , y-heap , y-var , y-transition with store-lookup x-store x-var in eq-x | store-lookup y-store y-var in eq-y
+progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition
+                                                                     | y-C , y-Δ , y-ext , y-store , y-heap , y-var , y-transition
+                                                                     | Val-Int x-val | Val-Int y-val =
+  S Z ,
+  (ε ,, Int-Type) ,
+  Ctx-extension-there Ctx-extension-here ,
+  Store-cons (Val-Int (x-val + y-val)) store ,
+  y-heap ,
+  SSL-Here ,
+  AM-Add {_} {_} {_} {Fs-Store-∅} {store} {_} {x-Δ} {_} {y-Δ} {x-store} {y-store} {h} {x} {y} {x-var} {y-var} {x-val} {y-val} {x-heap} {y-heap}
+         x-transition y-transition (sym eq-x) (sym eq-y)
 progress {.Int-Ty} {ssl-α} (Sub e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
 progress {.Bool-Ty} {ssl-α} (And e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
 progress {.Bool-Ty} {ssl-α} (Not e) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
