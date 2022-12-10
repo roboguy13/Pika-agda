@@ -90,9 +90,10 @@ data Args-transition {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-C
                            {arg-v} {args-vs}
                            {Δ↣Δ′} {Δ′↣Δ′′} →
     (to-ssl : To-SSL-Type α ssl-α) →
+    (non-fn : Non-Fn-Type α) →
     (arg , fs-store , store , h) ⟶ (Δ↣Δ′ , ssl-α , store′ , h′ , arg-v) →
     Args-transition (args , fs-store , store′ , h′) (Δ′↣Δ′′ , store′′ , h′′ , args-vs) →
-    Args-transition (Args-cons arg args , fs-store , store , h) (Δ′↣Δ′′ C∘ Δ↣Δ′ , store′′ , h′′ , SSL-Vars-cons to-ssl (apply-ctx-extension (Δ′↣Δ′′) arg-v) args-vs)
+    Args-transition (Args-cons non-fn (inj₁ arg) args , fs-store , store , h) (Δ′↣Δ′′ C∘ Δ↣Δ′ , store′′ , h′′ , SSL-Vars-cons to-ssl (apply-ctx-extension (Δ′↣Δ′′) arg-v) args-vs)
 
 data Eval-Layout-Body {C} {Δ : Type-Context C} {Γ} (fs-store : Fs-Store Γ) (store : Store Δ) (h : Heap) :
      Layout-Body Δ Γ → Val-Layout-Body → Set where
@@ -121,6 +122,7 @@ data Eval-Layout-Body {C} {Δ : Type-Context C} {Γ} (fs-store : Fs-Store Γ) (s
     Eval-Layout-Body fs-store store h (Ap n v e ∷ rest) rest′
 
 -- Transition relation for one expression
+-- TODO: Should there be a transition for Expr.V?
 data _⟶_ {C} {Δ} {Γ} where
 
   AM-Lit : ∀ {fs-store : Fs-Store Γ}
@@ -211,7 +213,7 @@ data _⟶_ {C} {Δ} {Γ} where
   -- {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-Context C′} {α} →
   -- (Expr Δ Γ α × Fs-Store Γ × Store Δ × Heap) →
   -- (Δ ↣ Δ′ × ∃[ ssl-α ] Store Δ′ × Heap × SSL-Var Δ′ ssl-α)
-progress : ∀ {α ssl-α h store} → (e : Expr ε ∅ α) →
+progress : ∀ {α ssl-α h} {Γ} {fs-store : Fs-Store Γ} → (e : Expr ε Γ α) →
   To-SSL-Type α ssl-α →
   Σ SSL-Context λ C →
   Σ (Type-Context C) λ Δ →
@@ -219,8 +221,51 @@ progress : ∀ {α ssl-α h store} → (e : Expr ε ∅ α) →
   Σ (Store Δ) λ store′ →
   Σ Heap λ h′ →
   ∃[ var ]
-    ((e , Fs-Store-∅ , store , h) ⟶ (ext , ssl-α , store′ , h′ , var ))
-progress {α} {ssl-α} {h} {store} (Lit x) ssl-type-prf =
+    ((e , fs-store , Store-[] , h) ⟶ (ext , ssl-α , store′ , h′ , var ))
+
+
+weaken-progress : ∀ {α ssl-α h} {C} {Δ : Type-Context C} {Γ} {fs-store : Fs-Store Γ} {store : Store Δ} → (e : Expr Δ Γ α) →
+  To-SSL-Type α ssl-α →
+  Σ SSL-Context λ C →
+  Σ (Type-Context C) λ Δ′ →
+  Σ (Δ ↣ Δ′) λ ext →
+  Σ (Store Δ′) λ store′ →
+  Σ Heap λ h′ →
+  ∃[ var ]
+    ((e , fs-store , store , h) ⟶ (ext , ssl-α , store′ , h′ , var ))
+weaken-progress {α} {ssl-α} {h} {.Z} {ε} {Γ} {fs-store} {Store-[]} e prf = progress e prf
+weaken-progress {α} {ssl-α} {h} {.(S _)} {Δ ,, x} {Γ} {fs-store} {Store-cons val store} e prf =
+  let
+    Δ↣Δ′ : Δ ↣ (Δ ,, x)
+    Δ↣Δ′ = Ctx-extension-there Ctx-extension-here
+
+    z = weaken-progress {α} {ssl-α} {h} {_} {Δ} {Γ} {fs-store} {store} {!!} {!!}
+  in
+  {!!}
+
+eval-layout-body : ∀ {C} {Δ : Type-Context C} {Γ} (fs-store : Fs-Store Γ) (store : Store Δ) (h : Heap) →
+  (body : Layout-Body Δ Γ) → ∃[ val-body ] Eval-Layout-Body fs-store store h body val-body
+eval-layout-body fs-store store h [] = [] , Eval-Layout-Body-[]
+
+eval-layout-body fs-store store h (Points-To lhs rhs base-prf ∷ body)
+  with eval store lhs | weaken-progress {_} {_} {h} {_} {_} {_} {fs-store} {store} rhs (proj₂ (to-SSL-Type (Non-Fn-Type-Base base-prf)))
+... | Val-Loc val , val-prf
+    | rhs-C , x-Δ , rhs-ext , rhs-store , rhs-heap , rhs-var , rhs-transition =
+  let
+    val-body , rest = eval-layout-body fs-store store h body
+  in
+  Val-Points-To val (store-lookup rhs-store rhs-var) ∷ val-body ,
+  Eval-Layout-Body-Points-To base-prf (proj₂ (to-SSL-Type (Non-Fn-Type-Base base-prf))) rhs-transition val-prf rest
+
+eval-layout-body fs-store store h (Ap n x x₁ ∷ body) =
+  let
+    val-body , rest = eval-layout-body fs-store store h body
+  in
+  val-body , Eval-Layout-Body-Ap rest
+
+
+progress {α} {ssl-α} {h} {Γ} {fs-store} (V v) ssl-type-prf = {!!}
+progress {α} {ssl-α} {h} (Lit x) ssl-type-prf =
   let
     ssl-val , ssl-prf = (to-SSL-Val ssl-type-prf x)
 
@@ -228,29 +273,37 @@ progress {α} {ssl-α} {h} {store} (Lit x) ssl-type-prf =
   S Z ,
   (ε ,, ssl-α) ,
   Ctx-extension-there Ctx-extension-here ,
-  Store-cons ssl-val store ,
+  Store-cons ssl-val Store-[] ,
   h ,
   SSL-Here ,
   AM-Lit ssl-prf
-  
-progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int
+
+progress {.Int-Ty} {.Int-Type} {h} (Add x y) To-SSL-Type-Int
   with progress x To-SSL-Type-Int
-progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition with progress y To-SSL-Type-Int
-progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition
-                                                                     | y-C , y-Δ , y-ext , y-store , y-heap , y-var , y-transition with store-lookup x-store x-var in eq-x | store-lookup y-store y-var in eq-y
-progress {.Int-Ty} {.Int-Type} {h} {store} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition
-                                                                     | y-C , y-Δ , y-ext , y-store , y-heap , y-var , y-transition
-                                                                     | Val-Int x-val | Val-Int y-val =
+progress {.Int-Ty} {.Int-Type} {h} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition with progress y To-SSL-Type-Int
+progress {.Int-Ty} {.Int-Type} {h} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition
+                                                             | y-C , y-Δ , y-ext , y-store , y-heap , y-var , y-transition with store-lookup x-store x-var in eq-x | store-lookup y-store y-var in eq-y
+progress {.Int-Ty} {.Int-Type} {h} (Add x y) To-SSL-Type-Int | x-C , x-Δ , x-ext , x-store , x-heap , x-var , x-transition
+                                                             | y-C , y-Δ , y-ext , y-store , y-heap , y-var , y-transition
+                                                             | Val-Int x-val | Val-Int y-val =
   S Z ,
   (ε ,, Int-Type) ,
   Ctx-extension-there Ctx-extension-here ,
-  Store-cons (Val-Int (x-val + y-val)) store ,
+  Store-cons (Val-Int (x-val + y-val)) Store-[] ,
   y-heap ,
   SSL-Here ,
-  AM-Add {_} {_} {_} {Fs-Store-∅} {store} {_} {x-Δ} {_} {y-Δ} {x-store} {y-store} {h} {x} {y} {x-var} {y-var} {x-val} {y-val} {x-heap} {y-heap}
-         x-transition y-transition (sym eq-x) (sym eq-y)
+  AM-Add x-transition y-transition (sym eq-x) (sym eq-y)
 progress {.Int-Ty} {ssl-α} (Sub e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
 progress {.Bool-Ty} {ssl-α} (And e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
 progress {.Bool-Ty} {ssl-α} (Not e) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
 progress {.Bool-Ty} {ssl-α} (Equal e e₁) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
-progress {.(Layout-Ty _)} {ssl-α} (Lower constr ssl-param x x₁ x₂ x₃) ssl-type-prf = {!!} , {!!} , {!!} , {!!} , {!!} , {!!} , {!!}
+
+progress {.(Layout-Ty _)} {ssl-α} {h} (Lower constr ssl-param constr-prf args layout-prf branch-prf) To-SSL-Type-Loc =
+  S Z ,
+  {!!} ,
+  {!!} ,
+  {!!} ,
+  {!!} ,
+  {!!} ,
+  {!!}
+  AM-Lower {!!} {!!} {!!} {!!} {!!} {!!} {!!} {!!} {!!}

@@ -8,6 +8,7 @@ open import Data.Integer
 open import Data.Bool
 open import Data.List
 open import Data.Product
+open import Data.Sum
 open import Data.Empty
 open import Data.Unit
 open import Relation.Binary.PropositionalEquality hiding ([_])
@@ -44,6 +45,10 @@ data Type : Set where
 data Base-Type : Type → Set where
   Base-Type-Int : Base-Type Int-Ty
   Base-Type-Bool : Base-Type Bool-Ty
+
+data Non-Fn-Type : Type → Set where
+  Non-Fn-Type-Base : ∀ {α} → Base-Type α → Non-Fn-Type α
+  Non-Fn-Type-Layout : ∀ {n} → Non-Fn-Type (Layout-Ty n)
 
 data First-Order : Type → Set where
   First-Order-Base : ∀ {α} → Base-Type α → First-Order α
@@ -91,6 +96,14 @@ data To-SSL-Val : ∀ {α ssl-α} → Val α → SSL-Val ssl-α → Set where
 to-SSL-Val : ∀ {α ssl-α} → To-SSL-Type α ssl-α → (val : Val α) → ∃[ ssl-val ] To-SSL-Val {α} {ssl-α} val ssl-val
 to-SSL-Val To-SSL-Type-Int (Val-Int x) = Val-Int x , To-SSL-Val-Int
 to-SSL-Val To-SSL-Type-Bool (Val-Bool x) = Val-Bool x , To-SSL-Val-Bool
+
+to-SSL-Type : ∀ {α} → Non-Fn-Type α → ∃[ ssl-α ] To-SSL-Type α ssl-α
+to-SSL-Type (Non-Fn-Type-Base Base-Type-Int) = Int-Type , To-SSL-Type-Int
+to-SSL-Type (Non-Fn-Type-Base Base-Type-Bool) = Bool-Type , To-SSL-Type-Bool
+to-SSL-Type Non-Fn-Type-Layout = Loc-Type , To-SSL-Type-Layout
+
+data Is-Layout-Type : Type → Set where
+  mk-Is-Layout-Type : ∀ {n} → Is-Layout-Type (Layout-Ty n)
 
 record Constr : Set where
   field
@@ -163,10 +176,12 @@ record Layout : Set where
     adt : Adt
     branches : Layout-Branches name adt
 
+-- TODO: Should the Δ be a datatype parameter?
 data Args : Context → Set where
   Args-∅ : Args ∅
   Args-cons : ∀ {C} {Δ : Type-Context C} {Γ₀ Γ α} →
-    Expr Δ Γ₀ α →
+    Non-Fn-Type α →
+    (Expr Δ Γ₀ α) ⊎ (Loc × Is-Layout-Type α) →
     Args Γ →
     Args (Γ ,, α)
 
@@ -242,14 +257,15 @@ data Expr where
     Expr Δ Γ Bool-Ty →
     Expr Δ Γ Bool-Ty
 
-  Equal : ∀ {Γ α} →
+  Equal : ∀ {Γ} →
     ∀ {C} {Δ : Type-Context C} →
-    Expr Δ Γ α →
-    Expr Δ Γ α →
+    Expr Δ Γ Int-Ty →
+    Expr Δ Γ Int-Ty →
     Expr Δ Γ Bool-Ty
 
   Lower : ∀ {Γ L-name ssl-α adt branches} →
     (constr : Constr) →
+    ∀ {C} {Δ : Type-Context C} →
     (ssl-param : SSL-Var (ε ,, ssl-α) ssl-α) →
 
     constr ∈ Adt.constrs adt →
@@ -264,14 +280,14 @@ data Expr where
     record { name = L-name ; adt = adt ; branches = branches } ∈ Global-Layout-Env →
     branch LB∈ branches →
 
-    ∀ {C} {Δ : Type-Context C} →
     Expr Δ Γ (Layout-Ty L-name)
 
   -- NOTE: Function definitions are already fully instantiated
-  Apply : ∀ f-name {Γ A B} (arg : Expr ε Γ (Layout-Ty (Layout.name A))) →
-    ∀ {C} {Δ : Type-Context C} →
+  Apply : ∀ f-name {Γ A B}
+    {C} {Δ : Type-Context C}
+    (arg : (Expr Δ Γ (Layout-Ty (Layout.name A))) ⊎ Loc) →
     (f-name , A , B) ∈ Global-Fn-Type-Env →
-    Expr Δ Γ (Fn-Ty (Layout-Ty (Layout.name A)) (Layout-Ty (Layout.name B)))
+    Expr Δ Γ (Layout-Ty (Layout.name B))
 
 -- Inclusion map between contexts
 data _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set where
@@ -300,6 +316,14 @@ Expr-weaken-Δ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} 
   Δ ↣ Δ′ →
   Expr Δ Γ α →
   Expr Δ′ Γ α
+
+-- apply-ctx-extension-Args : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Γ} →
+--   Δ ↣ Δ′ →
+--   Args Γ → Args Δ′ Γ
+-- apply-ctx-extension-Args prf Args-∅ = Args-∅
+-- apply-ctx-extension-Args prf (Args-cons prf-2 (inj₁ x) args) = Args-cons prf-2 (inj₁ (Expr-weaken-Δ prf x)) (apply-ctx-extension-Args prf args)
+-- apply-ctx-extension-Args prf (Args-cons {Γ₀} prf-2 (inj₂ y) args) = Args-cons {_} {_} {Γ₀} prf-2 (inj₂ y) (apply-ctx-extension-Args prf args)
+
 Expr-weaken-Δ prf (V x) = V x
 Expr-weaken-Δ prf (Lit x) = Lit x
 Expr-weaken-Δ prf (SSL-V x x₁) = SSL-V (apply-ctx-extension prf x) x₁
@@ -307,13 +331,54 @@ Expr-weaken-Δ prf (Add e e₁) = Add (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ 
 Expr-weaken-Δ prf (Sub e e₁) = Sub (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
 Expr-weaken-Δ prf (And e e₁) = And (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
 Expr-weaken-Δ prf (Not e) = Not (Expr-weaken-Δ prf e)
-Expr-weaken-Δ prf (Equal {_} {β} e e₁) = Equal {_} {β} (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
+Expr-weaken-Δ prf (Equal e e₁) = Equal (Expr-weaken-Δ prf e₁) (Expr-weaken-Δ prf e₁)
 Expr-weaken-Δ prf (Lower constr ssl-param x x₁ x₂ x₃) = Lower constr ssl-param x x₁ x₂ x₃
-Expr-weaken-Δ prf (Apply f {_} {A} {B} arg prf-2) = Apply f {_} {A} {B} arg prf-2
+Expr-weaken-Δ prf (Apply f {_} {A} {B} (inj₁ arg) prf-2) = Apply f {_} {A} {B} (inj₁ (Expr-weaken-Δ prf arg)) prf-2
+Expr-weaken-Δ prf (Apply f {_} {A} {B} (inj₂ arg) prf-2) = Apply f {_} {A} {B} (inj₂ arg) prf-2
 
 ε↣Δ : ∀ {C} {Δ : Type-Context C} → ε ↣ Δ
 ε↣Δ {.Z} {ε} = Ctx-extension-here
 ε↣Δ {.(S _)} {Δ ,, x} = Ctx-extension-there ε↣Δ
+
+Expr-Δ-subst-1 : ∀ {C} {Δ : Type-Context C} {α ssl-β} {Γ} {ssl-α} → (To-SSL-Type α ssl-α) →
+  Store (Δ ,, ssl-β) →
+  Expr (Δ ,, ssl-β) Γ α →
+  Expr Δ Γ α ⊎ (Loc × Is-Layout-Type α)
+
+-- Args-Δ-subst-1 : ∀ {C} {Δ : Type-Context C} {α} {Γ} →
+--   Store (Δ ,, α) →
+--   Args (Δ ,, α) Γ →
+--   Args Δ Γ
+-- Args-Δ-subst-1 store Args-∅ = Args-∅
+-- Args-Δ-subst-1 store (Args-cons {Γ₀} prf (inj₂ y) args) = Args-cons {_} {_} {Γ₀} prf (inj₂ y) (Args-Δ-subst-1 store args)
+-- Args-Δ-subst-1 store (Args-cons {Γ₀} prf (inj₁ x) args) with Expr-Δ-subst-1 (proj₂ (to-SSL-Type prf)) store x
+-- ... | inj₁ x₁ = Args-cons prf (inj₁ x₁) (Args-Δ-subst-1 store args)
+-- ... | inj₂ y = Args-cons {_} {_} {Γ₀} prf (inj₂ y) (Args-Δ-subst-1 store args)
+
+Expr-Δ-subst-1 prf-ssl store (V x) = inj₁ (V x)
+Expr-Δ-subst-1 prf-ssl store (Lit x) = inj₁ (Lit x)
+Expr-Δ-subst-1 {C} {Δ} prf-ssl store (SSL-V SSL-Here To-SSL-Type-Int) with store-lookup store SSL-Here
+... | Val-Int x = inj₁ (Lit (Val-Int x))
+Expr-Δ-subst-1 {C} {Δ} prf-ssl store (SSL-V SSL-Here To-SSL-Type-Bool) with store-lookup store SSL-Here
+... | Val-Bool x = inj₁ (Lit (Val-Bool x))
+Expr-Δ-subst-1 {C} {Δ} To-SSL-Type-Layout store (SSL-V SSL-Here To-SSL-Type-Layout) with store-lookup store SSL-Here
+... | Val-Loc x = inj₂ (x , mk-Is-Layout-Type)
+Expr-Δ-subst-1 prf-ssl store (SSL-V (SSL-There x) prf) = inj₁ (SSL-V x prf)
+Expr-Δ-subst-1 To-SSL-Type-Int store (Add e e₁) with (Expr-Δ-subst-1 To-SSL-Type-Int store e₁) | (Expr-Δ-subst-1 To-SSL-Type-Int store e₁)
+... | inj₁ x | inj₁ x₁ = inj₁ (Add x x₁)
+Expr-Δ-subst-1 To-SSL-Type-Int store (Sub e e₁) with (Expr-Δ-subst-1 To-SSL-Type-Int store e₁) | (Expr-Δ-subst-1 To-SSL-Type-Int store e₁)
+... | inj₁ x | inj₁ x₁ = inj₁ (Sub x x₁)
+Expr-Δ-subst-1 To-SSL-Type-Bool store (And e e₁) with (Expr-Δ-subst-1 To-SSL-Type-Bool store e₁) | (Expr-Δ-subst-1 To-SSL-Type-Bool store e₁)
+... | inj₁ x | inj₁ x₁ = inj₁ (And x x₁)
+Expr-Δ-subst-1 To-SSL-Type-Bool store (Not e) with (Expr-Δ-subst-1 To-SSL-Type-Bool store e)
+... | inj₁ x = inj₁ (Not x)
+Expr-Δ-subst-1 To-SSL-Type-Bool store (Equal e e₁) with (Expr-Δ-subst-1 To-SSL-Type-Int store e₁) | (Expr-Δ-subst-1 To-SSL-Type-Int store e₁)
+... | inj₁ x | inj₁ x₁ = inj₁ (Equal x x₁)
+Expr-Δ-subst-1 To-SSL-Type-Loc store (Lower constr ssl-param x x₁ x₂ x₃) = inj₁ (Lower constr ssl-param x x₁ x₂ x₃)
+Expr-Δ-subst-1 ssl-prf store (Apply f-name (inj₁ e) x) with Expr-Δ-subst-1 To-SSL-Type-Layout store e
+... | inj₁ x₁ = inj₁ (Apply f-name (inj₁ x₁) x)
+... | inj₂ (y , y-prf) = inj₁ (Apply f-name (inj₂ y) x)
+Expr-Δ-subst-1 ssl-prf store (Apply f-name (inj₂ loc) x) = inj₁ (Apply f-name (inj₂ loc) x )
 
 data Fs-Store : Context → Set where
   Fs-Store-∅ : Fs-Store ∅
