@@ -7,6 +7,7 @@ open import Data.List.Relation.Unary.Any
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Relation.Nullary
 open import Data.Sum
+open import Data.Empty
 
 module HeapDefs
   (Loc-Name : Set)
@@ -16,6 +17,11 @@ module HeapDefs
 data Loc : Set where
   Null : Loc
   mk-Loc : Loc-Name → ℕ → Loc
+
+get-Loc-Name : (a : Loc) → a ≢ Null → Loc-Name
+get-Loc-Name (mk-Loc name _) prf = name
+get-Loc-Name Null prf = ⊥-elim (prf refl)
+
 
 -- Loc-eq-dec : ∀ (a b : Loc) → (a ≡ b) ⊎ (a ≢ b)
 -- Loc-eq-dec Null Null = inj₁ refl
@@ -40,7 +46,7 @@ data Val : SSL-Type → Set where
 
 Heap : Set
 -- Heap = Loc → Maybe ℤ
-Heap = List (∃[ α ] (Loc × Val α))
+Heap = List (∃[ α ] ∃[ loc ] (loc ≢ Null) × Val α)
 
 -- _[_↦_] : ∀ {α} → Heap → Loc → Val α → Heap
 -- _[_↦_] {α} [] loc val = (α , loc , val) ∷ []
@@ -50,11 +56,11 @@ Heap = List (∃[ α ] (Loc × Val α))
 
 -- -- Heap update
 data _[_↦_]==_ : ∀ {α} → Heap → Loc → Val α → Heap → Set where
-  Heap-update-[] : ∀ {α loc val} →
-    [] [ loc ↦ val ]== ((α , loc , val) ∷ [])
+  Heap-update-[] : ∀ {α loc prf val} →
+    [] [ loc ↦ val ]== ((α , loc , prf , val) ∷ [])
 
-  Heap-update-here : ∀ {α β loc val val′ rest} →
-    ((β , loc , val′) ∷ rest) [ loc ↦ val ]== ((α , loc , val) ∷ rest)
+  Heap-update-here : ∀ {α β loc prf val val′ rest} →
+    ((β , loc , val′) ∷ rest) [ loc ↦ val ]== ((α , loc , prf , val) ∷ rest)
 
   Heap-update-there : ∀ {α β loc loc′} {val : Val α} {val′ rest rest′} →
     rest [ loc ↦ val ]== rest′ →
@@ -77,6 +83,10 @@ Dom-cons : ∀ {h locs α x i} →
   Dom ((α , x , i) ∷ h) (x ∷ locs)
 Dom-cons {.[]} {.[]} {α} {x} {i} Dom-[] = Dom-∷ Dom-[]
 Dom-cons {.((_ , _ , _) ∷ _)} {.(_ ∷ _)} {α} {x} {i} (Dom-∷ prf) = Dom-∷ (Dom-cons prf)
+
+-- Dom-locs : ∀ {loc-names h} → Dom h loc-names → List (∃[ loc ] loc ≢ Null)
+-- Dom-locs Dom-[] = []
+-- Dom-locs (Dom-∷ dom) = {!!}
 
 _∈_ : ∀ {A} → A → List A → Set
 x ∈ xs = Any (_≡ x) xs
@@ -115,6 +125,20 @@ app-[] {_} {_} (x ∷ xs) rewrite app-[] xs = refl
 ... | here px = here px
 ... | there (here px) = here px
 ... | there (there z) = there (∈-cons-app z)
+
+Dom-non-null : ∀ {h locs} →
+  Dom h locs →
+  ∀ {loc} →
+  loc ∈ locs →
+  loc ≢ Null
+Dom-non-null (Dom-∷ {_} {_} {prf , _} dom) (here refl) = prf
+Dom-non-null (Dom-∷ dom) (there prf) = Dom-non-null dom prf
+
+get-Loc-Names : ∀ {locs} →
+  (∀ {loc} → loc ∈ locs → loc ≢ Null) →
+  List Loc-Name
+get-Loc-Names {[]} f = []
+get-Loc-Names {x ∷ locs} f = get-Loc-Name x (f (here refl)) ∷ get-Loc-Names (λ {loc} prf → f (there prf))
 
 Disjoint : Heap → Heap → Set
 Disjoint a b =

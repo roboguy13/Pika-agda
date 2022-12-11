@@ -136,10 +136,10 @@ Heaplet-E-subst-1 e (Points-To lhs x) = Points-To (E-subst-1 lhs e) (E-subst-1 x
 Heaplet-E-subst-1 e (n · x) = n · Vec-map (λ z → E-subst-1 z e) x
 
 data Satisfies-Heaplet₀ {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} : ∀ (s : Store Γ) → (h : Heap) → Ind-Pred-Interpret Γ → Heaplet Γ Δ → Set where
-  Satisfies-Heaplet₀-↦ : ∀  {s : Store Γ} {h} {env} {loc-v rhs-e} {loc rhs} →
+  Satisfies-Heaplet₀-↦ : ∀  {s : Store Γ} {h} {env} {loc-v rhs-e} {loc non-null rhs} →
     SSL-Expr-Val-⇓ Γ Δ s (V loc-v) (Val-Loc loc) →
     SSL-Expr-Val-⇓ Γ Δ s rhs-e rhs →
-    h ≡ ((Loc-Type , loc , rhs) ∷ []) →
+    h ≡ ((Loc-Type , loc , non-null , rhs) ∷ []) →
     Satisfies-Heaplet₀ s h env (Points-To (V loc-v) rhs-e)
 
   Satisfies-Heaplet₀-· : ∀ {s : Store Γ} {h} {env} {labeled-p-name p-name args} {args-vals} →
@@ -233,10 +233,10 @@ Label-Valuation : Set
 Label-Valuation = Pred-Label → Ordinal
 
 data Satisfies-Heaplet {C E} {Γ : Type-Context C} {Δ : E-Type-Context E} (rules : List (Ind-Rule Γ Δ)) (ρ : Label-Valuation) : ∀ (s : Store Γ) → (h : Heap) → Heaplet Γ Δ → Set where
-  Satisfies-Heaplet-↦ : ∀ {α : SSL-Type} {s : Store Γ} {loc-v} {rhs-e : SSL-Expr Γ Δ α} {loc : Loc}  {rhs : Val α} {h : Heap} →
+  Satisfies-Heaplet-↦ : ∀ {α : SSL-Type} {s : Store Γ} {loc-v} {rhs-e : SSL-Expr Γ Δ α} {loc : Loc} {non-null} {rhs : Val α} {h : Heap} →
     SSL-Expr-Val-⇓ {C} Γ Δ s (V loc-v) (Val-Loc loc) →
     SSL-Expr-Val-⇓ {C} {E} Γ Δ s rhs-e rhs →
-    h ≡ ((α , loc , rhs) ∷ []) →
+    h ≡ ((α , loc , non-null , rhs) ∷ []) →
     Satisfies-Heaplet rules ρ s h (Points-To (V loc-v) rhs-e)
 
   Satisfies-Heaplet-· : ∀ {s : Store Γ} {h} {labeled-p-name p-name args} {args-vals} →
