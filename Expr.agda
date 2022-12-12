@@ -177,13 +177,13 @@ record Layout : Set where
     branches : Layout-Branches name adt
 
 -- TODO: Should the Δ be a datatype parameter?
-data Args {C} (Δ : Type-Context C) {Γ₀} : Context → Set where
-  Args-∅ : Args Δ ∅
+data Args {C} (Δ : Type-Context C) Γ₀ : Context → Set where
+  Args-∅ : Args Δ Γ₀ ∅
   Args-cons : ∀ {Γ α} →
     Non-Fn-Type α →
     (Expr Δ Γ₀ α) ⊎ (Loc × Is-Layout-Type α) →
-    Args {C} Δ {Γ₀} Γ →
-    Args Δ (Γ ,, α)
+    Args {C} Δ Γ₀ Γ →
+    Args Δ Γ₀ (Γ ,, α)
 
 -- Give a SuSLik variable for each fun-SuSLik variable in the given context. The
 -- SuSLik variables are from SuSLik context Δ
@@ -269,7 +269,7 @@ data Expr where
     (ssl-param : SSL-Var (ε ,, Loc-Type) Loc-Type) →
 
     constr ∈ Adt.constrs adt →
-    Args {C} Δ {Γ} (Constr.field-Γ constr) →
+    Args {C} Δ Γ (Constr.field-Γ constr) →
 
     ∀ {L-body : List (L-Heaplet (ε ,, Loc-Type) (Constr.field-Γ constr))} →
 
@@ -289,6 +289,8 @@ data Expr where
     (f-name , A , B) ∈ Global-Fn-Type-Env →
     Expr Δ Γ (Layout-Ty (Layout.name B))
 
+-- data Shift : ∀ {C C′} → Type-Context C → Type-Context C′ → Set where
+
 -- Inclusion map between contexts
 data _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set where
   Ctx-extension-here : ∀ {C} {Δ : Type-Context C} → Δ ↣ Δ
@@ -296,20 +298,16 @@ data _↣_ : ∀ {C C′} → Type-Context C → Type-Context C′ → Set where
     Δ ↣ Δ′ →
     Δ ↣ (Δ′ ,, α)
 
--- Action of context inclusion maps on variables
-apply-ctx-extension : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {α} →
-  Δ ↣ Δ′ →
-  SSL-Var Δ α → SSL-Var Δ′ α
-apply-ctx-extension Ctx-extension-here var = var
-apply-ctx-extension (Ctx-extension-there prf) var = SSL-There (apply-ctx-extension prf var)
+  -- Ctx-extension-S : ∀ {C} {Δ : Type-Context C} {Δ′ : Type-Context (S C)} →
+  --   Δ ↣ Δ′
 
--- weaken-Store : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} →
---   Δ ↣ Δ′ →
---   Store Δ →
---   Store Δ′
--- weaken-Store Ctx-extension-here store = store
--- weaken-Store (Ctx-extension-there Δ↣Δ′) Store-[] = ?
--- weaken-Store (Ctx-extension-there Δ↣Δ′) (Store-cons val store) = {!!}
+  -- Ctx-extension-inj₁ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Δ⊔Δ′} →
+  --   Ctx-⊔ Δ Δ′ Δ⊔Δ′ →
+  --   Δ ↣ Δ⊔Δ′
+
+ε↣Δ : ∀ {C} {Δ : Type-Context C} → ε ↣ Δ
+ε↣Δ {.Z} {ε} = Ctx-extension-here
+ε↣Δ {.(S _)} {Δ ,, x} = Ctx-extension-there ε↣Δ
 
 -- Composition of context inclusion maps
 _C∘_ : ∀ {C C′ C′′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Δ′′ : Type-Context C′′} →
@@ -320,6 +318,61 @@ Ctx-extension-here C∘ Ctx-extension-here = Ctx-extension-here
 Ctx-extension-here C∘ Ctx-extension-there prf-2 = Ctx-extension-there prf-2
 Ctx-extension-there prf-1 C∘ prf-2 = Ctx-extension-there (prf-1 C∘ prf-2)
 
+⊔-inj₂↣ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} → ∀ {Δ⊔Δ′} → Ctx-⊔ Δ Δ′ Δ⊔Δ′ → Δ′ ↣ Δ⊔Δ′
+⊔-inj₂↣ Ctx-⊔-ε-ε = Ctx-extension-here
+⊔-inj₂↣ Ctx-⊔-ε-cons = Ctx-extension-here
+⊔-inj₂↣ Ctx-⊔-cons-ε = ε↣Δ
+⊔-inj₂↣ (Ctx-⊔-cons-cons prf) = Ctx-extension-there (⊔-inj₂↣ prf)
+
+-- Action of context inclusion maps on variables
+apply-ctx-extension : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {α} →
+  Δ ↣ Δ′ →
+  SSL-Var Δ α → SSL-Var Δ′ α
+apply-ctx-extension Ctx-extension-here var = var
+apply-ctx-extension (Ctx-extension-there prf) var = SSL-There (apply-ctx-extension prf var)
+
+⊔-SSL-Vars-inj₁ : ∀ {α} {C C′} → {Δ : Type-Context C} → {Δ′ : Type-Context C′} → ∀ {Δ′′} → Ctx-⊔ Δ Δ′ Δ′′ → SSL-Vars Δ α → SSL-Vars Δ′′ α
+⊔-SSL-Vars-inj₁ Ctx-⊔-ε-ε SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₁ Ctx-⊔-ε-cons SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₁ {α} {C} {C′} {Δ} {Δ′} Ctx-⊔-ε-cons (SSL-Vars-cons x x₁ vars) =
+  let
+    z = ⊔-SSL-Vars-inj₁ Ctx-⊔-ε-cons vars
+  in
+  SSL-Vars-cons x (apply-ctx-extension ε↣Δ x₁) z
+⊔-SSL-Vars-inj₁ Ctx-⊔-cons-ε (SSL-Vars-cons x x₁ vars) = SSL-Vars-cons x x₁ vars
+⊔-SSL-Vars-inj₁ Ctx-⊔-cons-ε SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₁ (Ctx-⊔-cons-cons prf) SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₁ (Ctx-⊔-cons-cons prf) (SSL-Vars-cons x x₁ vars) =
+  let
+    z = ⊔-SSL-Vars-inj₁ (Ctx-⊔-cons-cons prf) vars
+    y = Ctx-⊔-inj₁ (Ctx-⊔-cons-cons prf) x₁
+  in
+  SSL-Vars-cons x y z
+
+
+
+⊔-SSL-Vars-inj₂ : ∀ {α} {C C′} → {Δ : Type-Context C} → {Δ′ : Type-Context C′} → ∀ {Δ′′} → Ctx-⊔ Δ Δ′ Δ′′ → SSL-Vars Δ′ α → SSL-Vars Δ′′ α
+⊔-SSL-Vars-inj₂ Ctx-⊔-ε-ε SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₂ Ctx-⊔-ε-cons SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₂ Ctx-⊔-ε-cons (SSL-Vars-cons x x₁ vars) = SSL-Vars-cons x x₁ vars
+⊔-SSL-Vars-inj₂ Ctx-⊔-cons-ε SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₂ (Ctx-⊔-cons-cons prf) SSL-Vars-∅ = SSL-Vars-∅
+⊔-SSL-Vars-inj₂ (Ctx-⊔-cons-cons prf) (SSL-Vars-cons x x₁ vars) =
+  let
+    z = ⊔-SSL-Vars-inj₂ (Ctx-⊔-cons-cons prf) vars
+    y = Ctx-⊔-inj₂ (Ctx-⊔-cons-cons prf) x₁
+  in
+  SSL-Vars-cons x y z
+
+
+-- weaken-Store : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} →
+--   Δ ↣ Δ′ →
+--   Store Δ →
+--   Store Δ′
+-- weaken-Store Ctx-extension-here store = store
+-- weaken-Store (Ctx-extension-there Δ↣Δ′) Store-[] = ?
+-- weaken-Store (Ctx-extension-there Δ↣Δ′) (Store-cons val store) = {!!}
+
 -- data Args {C} (Δ : Type-Context C) {Γ₀} : Context → Set where
 Expr-weaken-Δ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Γ} {α} →
   Δ ↣ Δ′ →
@@ -328,8 +381,8 @@ Expr-weaken-Δ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} 
 
 Args-weaken-Δ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Γ₀} {Γ} →
   Δ ↣ Δ′ →
-  Args Δ {Γ₀} Γ →
-  Args Δ′ {Γ₀} Γ
+  Args Δ Γ₀ Γ →
+  Args Δ′ Γ₀ Γ
 Args-weaken-Δ incl Args-∅ = Args-∅
 Args-weaken-Δ incl (Args-cons x (inj₂ y) args) =
   Args-cons x (inj₂ y) (Args-weaken-Δ incl args)
@@ -356,9 +409,25 @@ Expr-weaken-Δ prf (Lower constr ssl-param x x₁ x₂ x₃) =
 Expr-weaken-Δ prf (Apply f {_} {A} {B} (inj₁ arg) prf-2) = Apply f {_} {A} {B} (inj₁ (Expr-weaken-Δ prf arg)) prf-2
 Expr-weaken-Δ prf (Apply f {_} {A} {B} (inj₂ arg) prf-2) = Apply f {_} {A} {B} (inj₂ arg) prf-2
 
-ε↣Δ : ∀ {C} {Δ : Type-Context C} → ε ↣ Δ
-ε↣Δ {.Z} {ε} = Ctx-extension-here
-ε↣Δ {.(S _)} {Δ ,, x} = Ctx-extension-there ε↣Δ
+-- ↣SΔ : ∀ {C} {Δ : Type-Context C} {Δ′ : Type-Context (S C)} → Δ ↣ Δ′
+-- ↣SΔ {Z} {Δ} {Δ′} = {!!}
+-- ↣SΔ {S C} {Δ} {Δ′} = {!!}
+
+-- Ctx-⊔-↣-right : ∀ {C C′} {α β} {Δ : Type-Context C} {Δ′ : Type-Context C′} →
+--   Ctx-⊔ (Δ ,, α) Δ′ ↣ Ctx-⊔ (Δ ,, α) (Δ′ ,, β)
+-- Ctx-⊔-↣-right {Z} {Z} {_} {_} {ε} {ε} = {!!}
+-- Ctx-⊔-↣-right {_} {_} {_} {_} {ε} {Δ′ ,, x} = {!!}
+-- Ctx-⊔-↣-right {_} {_} {_} {_} {Δ ,, x} {ε} = {!!}
+-- Ctx-⊔-↣-right {_} {_} {_} {_} {Δ ,, x} {Δ′ ,, x₁} = {!!}
+
+-- Δ-inj₁ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} → Δ ↣ Ctx-⊔ Δ Δ′
+-- Δ-inj₁ {_} {_} {ε} {Δ′} = ε↣Δ
+-- Δ-inj₁ {_} {_} {Δ ,, x} {ε} = Ctx-extension-here
+-- Δ-inj₁ {_} {_} {Δ ,, x} {Δ′ ,, y} =
+--   let
+--     z = Δ-inj₁ {_} {_} {Δ } {Δ′ ,, y}
+--   in
+--   Ctx-⊔-↣-right C∘ Δ-inj₁ {_} {_} {Δ ,, x} {Δ′}
 
 -- Expr-Δ-subst-1 : ∀ {C} {Δ : Type-Context C} {α ssl-β} {Γ} {ssl-α} → (To-SSL-Type α ssl-α) →
 --   Store (Δ ,, ssl-β) →
@@ -406,8 +475,8 @@ data Expr-Δ-subst-1 {C} {Δ : Type-Context C} {Γ} : ∀ {ssl-β} {α} {ssl-α}
     Set
 
 data Args-Δ-subst-1 {C} {Δ : Type-Context C} {Γ₀} : ∀ {Γ α} (store : Store (Δ ,, α)) →
-    Args (Δ ,, α) {Γ₀} Γ →
-    Args Δ {Γ₀} Γ →
+    Args (Δ ,, α) Γ₀ Γ →
+    Args Δ Γ₀ Γ →
     Set where
   Args-Δ-subst-1-∅ : ∀ {α store} →
     Args-Δ-subst-1 {_} {_} {_} {_} {α} store Args-∅ Args-∅
@@ -468,7 +537,7 @@ data Expr-Δ-subst-1 {C} {Δ} {Γ}
     Expr-Δ-subst-1 To-SSL-Type-Int store y (inj₁ y′) →
     Expr-Δ-subst-1 To-SSL-Type-Bool store (Equal x y) (inj₁ (Equal x′ y′))
 
-  Expr-Δ-subst-1-Lower : ∀ {L-name} {ssl-β} {adt : Adt} {L-branches} {constr : Constr} {ssl-param : SSL-Var (ε ,, Loc-Type) Loc-Type} {x : constr ∈ Adt.constrs adt} {y : Args (Δ ,, ssl-β) (Constr.field-Γ constr)} {y-subst : Args Δ (Constr.field-Γ constr)} {L-body} {z w} {store : Store (Δ ,, ssl-β)} →
+  Expr-Δ-subst-1-Lower : ∀ {L-name} {ssl-β} {adt : Adt} {L-branches} {constr : Constr} {ssl-param : SSL-Var (ε ,, Loc-Type) Loc-Type} {x : constr ∈ Adt.constrs adt} {y : Args (Δ ,, ssl-β) Γ (Constr.field-Γ constr)} {y-subst : Args Δ Γ (Constr.field-Γ constr)} {L-body} {z w} {store : Store (Δ ,, ssl-β)} →
     Args-Δ-subst-1 store y y-subst →
     Expr-Δ-subst-1 (To-SSL-Type-Layout {L-name}) store (Lower {Global-Layout-Env} {Γ} {L-name} {adt} {L-branches} constr {S C} {Δ ,, ssl-β} ssl-param x y {L-body} z w) (inj₁ (Lower constr ssl-param x y-subst z w))
 
@@ -498,7 +567,7 @@ expr-Δ-subst-1 : ∀ {C} {Δ : Type-Context C} {α ssl-β} {Γ} {ssl-α} → (p
 
 args-Δ-subst-1 : ∀ {C} {Δ : Type-Context C} {α} {Γ₀} {Γ} →
   (store : Store (Δ ,, α)) →
-  (args : Args (Δ ,, α) {Γ₀} Γ) →
+  (args : Args (Δ ,, α) Γ₀ Γ) →
   ∃[ args′ ] Args-Δ-subst-1 store args args′
 args-Δ-subst-1 store Args-∅ = Args-∅ , Args-Δ-subst-1-∅
 args-Δ-subst-1 store (Args-cons x (inj₁ x₁) args) =

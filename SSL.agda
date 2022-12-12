@@ -248,6 +248,70 @@ store-lookup {.(S _)} {.(_ ,, α)} {α} (Store-cons val store) SSL-Here = val
 store-lookup {.(S _)} {.(_ ,, _)} {α} (Store-cons val store) (SSL-There var) =
   store-lookup store var
 
+SSL-Ctx-+ : SSL-Context → SSL-Context → SSL-Context
+SSL-Ctx-+ Z b = b
+SSL-Ctx-+ a Z = a
+SSL-Ctx-+ (S a) b = S (SSL-Ctx-+ a b)
+
+data Ctx-⊔ : ∀ {C C′} → Type-Context C → Type-Context C′ → Type-Context (SSL-Ctx-+ C C′) → Set where
+  Ctx-⊔-ε-ε : Ctx-⊔ ε ε ε
+  Ctx-⊔-ε-cons : ∀ {C′} {Γ′ β} → Ctx-⊔ {Z} {S C′} ε (Γ′ ,, β) (Γ′ ,, β)
+  Ctx-⊔-cons-ε : ∀ {C} {Γ α} → Ctx-⊔ {S C} {Z} (Γ ,, α) ε (Γ ,, α)
+  Ctx-⊔-cons-cons : ∀ {C C′} {Γ Γ′ α β} {r} →
+    Ctx-⊔ {C} {S C′} Γ (Γ′ ,, β) r →
+    Ctx-⊔ (Γ ,, α) (Γ′ ,, β) (r ,, α)
+
+Ctx-⊔-exists : ∀ {C C′} → {Γ : Type-Context C} → {Γ′ : Type-Context C′} → ∃[ Γ⊔Γ′ ] Ctx-⊔ Γ Γ′ Γ⊔Γ′
+Ctx-⊔-exists {_} {_} {ε} {ε} = ε , Ctx-⊔-ε-ε
+Ctx-⊔-exists {_} {_} {ε} {Γ′ ,, x} = Γ′ ,, x , Ctx-⊔-ε-cons
+Ctx-⊔-exists {_} {_} {Γ ,, x} {ε} = Γ ,, x , Ctx-⊔-cons-ε
+Ctx-⊔-exists {_} {_} {Γ ,, x} {Γ′ ,, x₁} =
+  let
+    z , z-prf = Ctx-⊔-exists {_} {_} {Γ} {Γ′ ,, x₁}
+  in
+  (z ,, x) , Ctx-⊔-cons-cons z-prf
+
+Ctx-⊔-inj₁ : ∀ {α} {C C′} → {Γ : Type-Context C} → {Γ′ : Type-Context C′} → ∀ {Γ′′} → Ctx-⊔ Γ Γ′ Γ′′ → SSL-Var Γ α → SSL-Var Γ′′ α
+Ctx-⊔-inj₁ Ctx-⊔-ε-ε ()
+Ctx-⊔-inj₁ Ctx-⊔-ε-cons ()
+Ctx-⊔-inj₁ Ctx-⊔-cons-ε SSL-Here = SSL-Here
+Ctx-⊔-inj₁ Ctx-⊔-cons-ε (SSL-There var) = SSL-There var
+Ctx-⊔-inj₁ (Ctx-⊔-cons-cons prf) SSL-Here = SSL-Here
+Ctx-⊔-inj₁ (Ctx-⊔-cons-cons prf) (SSL-There var) = SSL-There (Ctx-⊔-inj₁ prf var)
+
+Ctx-⊔-inj₂ : ∀ {α} {C C′} → {Γ : Type-Context C} → {Γ′ : Type-Context C′} → ∀ {Γ′′} → Ctx-⊔ Γ Γ′ Γ′′ → SSL-Var Γ′ α → SSL-Var Γ′′ α
+Ctx-⊔-inj₂ Ctx-⊔-ε-ε ()
+Ctx-⊔-inj₂ Ctx-⊔-ε-cons SSL-Here = SSL-Here
+Ctx-⊔-inj₂ Ctx-⊔-ε-cons (SSL-There var) = SSL-There var
+Ctx-⊔-inj₂ Ctx-⊔-cons-ε ()
+Ctx-⊔-inj₂ (Ctx-⊔-cons-cons prf) SSL-Here = SSL-There (Ctx-⊔-inj₂ prf SSL-Here)
+Ctx-⊔-inj₂ (Ctx-⊔-cons-cons prf) (SSL-There var) = SSL-There (Ctx-⊔-inj₂ prf (SSL-There var))
+
+Ctx-⊔-store : ∀ {C C′} → {Γ : Type-Context C} → {Γ′ : Type-Context C′} → ∀ {Γ⊔Γ′} → Ctx-⊔ Γ Γ′ Γ⊔Γ′ → Store Γ → Store Γ′ → Store Γ⊔Γ′
+Ctx-⊔-store Ctx-⊔-ε-ε Store-[] Store-[] = Store-[]
+Ctx-⊔-store Ctx-⊔-ε-cons Store-[] (Store-cons val store-2) = Store-cons val store-2
+Ctx-⊔-store Ctx-⊔-cons-ε (Store-cons val store-1) Store-[] = Store-cons val store-1
+Ctx-⊔-store (Ctx-⊔-cons-cons prf) (Store-cons val store-1) (Store-cons val₁ store-2) =
+  Store-cons val (Ctx-⊔-store prf store-1 (Store-cons val₁ store-2))
+
+-- Ctx-⊔ : ∀ {C C′} → Type-Context C → Type-Context C′ → Type-Context (SSL-Ctx-+ C C′)
+-- Ctx-⊔ ε ε = ε
+-- Ctx-⊔ ε (b ,, x) = b ,, x
+-- Ctx-⊔ (a ,, x) ε = a ,, x
+-- Ctx-⊔ (a ,, x) (b ,, x₁) = Ctx-⊔ a (b ,, x₁) ,, x
+
+-- Ctx-⊔-inj₁ : ∀ {α} {C C′} → {Γ : Type-Context C} → {Γ′ : Type-Context C′} → SSL-Var Γ α → SSL-Var (Ctx-⊔ Γ Γ′) α
+-- Ctx-⊔-inj₁ {_} {_} {_} {Γ ,, x} {ε} SSL-Here = SSL-Here
+-- Ctx-⊔-inj₁ {_} {_} {_} {Γ ,, x} {Γ′ ,, x₁} SSL-Here = SSL-Here
+-- Ctx-⊔-inj₁ {_} {_} {_} {Γ ,, x} {ε} (SSL-There var) = SSL-There var
+-- Ctx-⊔-inj₁ {_} {_} {_} {Γ ,, x} {Γ′ ,, x₁} (SSL-There var) = SSL-There (Ctx-⊔-inj₁ var)
+
+-- Ctx-⊔-inj₂ : ∀ {α} {C C′} → {Γ : Type-Context C} → {Γ′ : Type-Context C′} → SSL-Var Γ′ α → SSL-Var (Ctx-⊔ Γ Γ′) α
+-- Ctx-⊔-inj₂ {_} {_} {_} {ε} {Γ′ ,, x} SSL-Here = SSL-Here
+-- Ctx-⊔-inj₂ {_} {_} {_} {ε} {Γ′ ,, x} (SSL-There var) = SSL-There var
+-- Ctx-⊔-inj₂ {_} {_} {_} {Γ ,, x} {Γ′ ,, x₁} SSL-Here = SSL-There (Ctx-⊔-inj₂ {_} {_} {_} {Γ} {Γ′ ,, x₁} SSL-Here)
+-- Ctx-⊔-inj₂ {_} {_} {_} {Γ ,, x} {Γ′ ,, x₁} (SSL-There var) = SSL-There (Ctx-⊔-inj₂ {_} {_} {_} {Γ} {Γ′ ,, x₁} (SSL-There var))
+
 -- data _S[_↦_]==_ : ∀ {C} {Γ : Type-Context C} → Store Γ → where
 --   -- Store-update-here 
 
