@@ -409,6 +409,19 @@ Expr-weaken-Δ prf (Lower constr ssl-param x x₁ x₂ x₃) =
 Expr-weaken-Δ prf (Apply f {_} {A} {B} (inj₁ arg) prf-2) = Apply f {_} {A} {B} (inj₁ (Expr-weaken-Δ prf arg)) prf-2
 Expr-weaken-Δ prf (Apply f {_} {A} {B} (inj₂ arg) prf-2) = Apply f {_} {A} {B} (inj₂ arg) prf-2
 
+SSL-Vars-weaken-Δ : ∀ {C C′} {Δ : Type-Context C} {Δ′ : Type-Context C′} {Γ} →
+  Δ ↣ Δ′ →
+  SSL-Vars Δ Γ →
+  SSL-Vars Δ′ Γ
+SSL-Vars-weaken-Δ Ctx-extension-here SSL-Vars-∅ = SSL-Vars-∅
+SSL-Vars-weaken-Δ Ctx-extension-here (SSL-Vars-cons x x₁ vars) = SSL-Vars-cons x x₁ vars
+SSL-Vars-weaken-Δ (Ctx-extension-there prf) SSL-Vars-∅ = SSL-Vars-∅
+SSL-Vars-weaken-Δ (Ctx-extension-there prf) (SSL-Vars-cons x x₁ vars) =
+  let
+    z = SSL-Vars-weaken-Δ (Ctx-extension-there prf) vars
+  in
+  SSL-Vars-cons x (apply-ctx-extension (Ctx-extension-there prf) x₁) z
+
 -- ↣SΔ : ∀ {C} {Δ : Type-Context C} {Δ′ : Type-Context (S C)} → Δ ↣ Δ′
 -- ↣SΔ {Z} {Δ} {Δ′} = {!!}
 -- ↣SΔ {S C} {Δ} {Δ′} = {!!}

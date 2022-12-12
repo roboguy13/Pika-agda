@@ -100,6 +100,28 @@ data Args-transition {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-C
   Args-transition-[] : ∀ {fs-store store h} →
     Args-transition (Args-∅ , fs-store , store , h) (Ctx-extension-here , store , h , SSL-Vars-∅)
 
+  -- AM-Lit : ∀ {fs-store : Fs-Store Γ}
+  --            {store : Store Δ}
+  --            {h}
+  --            {α} {ssl-α : SSL-Type}
+  --            {x : Val α} {ssl-x : SSL-Val ssl-α} →
+  --   To-SSL-Val x ssl-x →
+  --   let
+  --     store′ : Store (Δ ,, ssl-α)
+  --     store′ = Store-cons ssl-x store
+  --   in
+  --   (Lit x , fs-store , store , h) ⟶ (Ctx-extension-there Ctx-extension-here , ssl-α , store′ , h , SSL-Here)
+
+  Args-transition-cons-loc : ∀ {C′} {Δ′ : Type-Context C′} {Γ′ n} {non-fn} {fs-store} {store h} {store′ : Store Δ′} {h′} {inj₂-arg} {arg} {args}
+                             {var : SSL-Var (Δ′ ,, Loc-Type) Loc-Type} {vars : SSL-Vars Δ′ Γ′}  (Δ↣Δ′ : Δ ↣ Δ′)
+                             {weakened-vars} →
+    inj₂-arg ≡ inj₂ arg →
+    weakened-vars ≡ SSL-Vars-weaken-Δ (Ctx-extension-there Ctx-extension-here) vars →
+    Args-transition (args , fs-store , store , h) (Δ↣Δ′ , store′ , h′ , vars) →
+    Args-transition {_} {_} {_} {_} {Δ′ ,, Loc-Type} {Γ′ ,, Layout-Ty n}
+      (Args-cons non-fn inj₂-arg args , fs-store , store , h)
+      (Ctx-extension-there Δ↣Δ′ , Store-cons (Val-Loc (proj₁ arg)) store′ , h′ , (SSL-Vars-cons To-SSL-Type-Layout var weakened-vars))
+
   Args-transition-cons : ∀ {Γ′} {α ssl-α}
                            {h h′ h′′}
                            {C′ C′′}
@@ -109,7 +131,7 @@ data Args-transition {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-C
                            {arg-store′ : Store Δ′}
                            {args-store′ : Store Δ′′}
                            {Δ′⊔Δ′′ : Type-Context (SSL-Ctx-+ C′ C′′)}
-                           {store′′ : Store Δ′⊔Δ′′}
+                           {store′′ : Store {SSL-Ctx-+ C′ C′′} Δ′⊔Δ′′}
                            {fs-store : Fs-Store Γ}
                            {args : Args Δ Γ Γ′}
                            {arg : Expr Δ Γ α}
@@ -127,11 +149,13 @@ data Args-transition {C} {Δ : Type-Context C} {Γ} : ∀ {C′} {Δ′ : Type-C
     (Δ′⊔Δ′′-prf : Ctx-⊔ Δ′ Δ′′ Δ′⊔Δ′′) →
     -- Args-transition (new-args , ? , store , h) (Δ↣Δ′′ , store′′ , h′′ , new-vs)
 
+    store′′ ≡ Ctx-⊔-store Δ′⊔Δ′′-prf arg-store′ args-store′ →
+
     -- let
     --   store′′ = store-⊔ arg-store′ args-store′
     -- in
     ∀ {args-vs′} →
-    -- args-vs′ ≡ Ctx-⊔-inj₁ args-vs →
+    args-vs′ ≡ ⊔-SSL-Vars-inj₂ Δ′⊔Δ′′-prf args-vs →
     Args-transition {_} {_} {_} {_} {_} {Γ′ ,, α} ( Args-cons non-fn inj₁-arg args , fs-store , store , h) (⊔-inj₂↣ Δ′⊔Δ′′-prf C∘ Δ↣Δ′′ , store′′ , h′′ , SSL-Vars-cons to-ssl (Ctx-⊔-inj₁ Δ′⊔Δ′′-prf arg-v) args-vs′)
 
 data Eval-Layout-Body {C} {Δ : Type-Context C} {Γ} (fs-store : Fs-Store Γ) (store : Store Δ) (h : Heap) :
@@ -396,7 +420,19 @@ Args-progress h {Γ} {Γ′} fs-store {C₀} {Δ₀} store Args-∅ =
   SSL-Vars-∅ ,
   Args-transition-[]
 
-Args-progress h fs-store store (Args-cons x (inj₂ loc) args) = {!!}
+Args-progress h {Γ} {.(_ ,, Int-Ty)} fs-store {C₀} {Δ₀} store (Args-cons (Non-Fn-Type-Base Base-Type-Int) (inj₂ (_ , ())) args)
+Args-progress h {Γ} {.(_ ,, Bool-Ty)} fs-store {C₀} {Δ₀} store (Args-cons (Non-Fn-Type-Base Base-Type-Bool) (inj₂ (_ , ())) args)
+Args-progress h {Γ} {.(_ ,, Layout-Ty _)} fs-store {C₀} {Δ₀} store (Args-cons Non-Fn-Type-Layout (inj₂ loc) args)
+  with Args-progress h fs-store store args
+Args-progress h {Γ} {.(_ ,, Layout-Ty _)} fs-store {C₀} {Δ₀} store (Args-cons Non-Fn-Type-Layout (inj₂ loc) args)
+              | args-C , args-Δ , args-ext , args-store , args-h , args-vars , args-transition =
+  S args-C ,
+  args-Δ ,, Loc-Type ,
+  Ctx-extension-there args-ext ,
+  Store-cons (Val-Loc (proj₁ loc)) args-store ,
+  args-h ,
+  SSL-Vars-cons To-SSL-Type-Layout SSL-Here (SSL-Vars-weaken-Δ (Ctx-extension-there Ctx-extension-here) args-vars) ,
+  Args-transition-cons-loc args-ext refl refl args-transition
 
 Args-progress h {Γ} {Γ′} fs-store store (Args-cons x (inj₁ e) args)
   with progress {_} {_} {h} {Γ} {fs-store} e (proj₂ (to-SSL-Type x))
@@ -415,7 +451,7 @@ Args-progress h {Γ} {Γ′} fs-store store (Args-cons {Γ = Γ₁} x x₁ args)
   Ctx-⊔-store ctx-prf e-store args-store ,
   args-h ,
   SSL-Vars-cons (proj₂ (to-SSL-Type x)) (Ctx-⊔-inj₁ ctx-prf e-var) (⊔-SSL-Vars-inj₂ ctx-prf args-vars) ,
-  Args-transition-cons (proj₂ (to-SSL-Type x)) x e-transition args-transition refl ctx-prf
+  Args-transition-cons (proj₂ (to-SSL-Type x)) x e-transition args-transition refl ctx-prf refl refl
 
 
 progress {α} {ssl-α} {h} {Γ} {fs-store} {C₀} {Δ₀} {store} (V x) ssl-type-prf =
