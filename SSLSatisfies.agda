@@ -111,13 +111,6 @@ Satisfies-Expr {_} {Exist-Z} {_} {ε} s e = Satisfies-Expr₀ s e
 Satisfies-Expr {_} {(Exist-S _)} {_} {Δ₀ ,, x} s e = ∃[ v ] Satisfies-Expr s (E-subst-1 e v)
 
 
--- See https://types.pl/web/@pigworker/109429538158539127
-data _∘_==_ : Heap → Heap → Heap → Set where
-  mk-∘ : ∀ h h′ h′′ →
-    Disjoint h h′ →
-    h′′ ≡S (h ++ h′) →
-    h ∘ h′ == h′′
-
 Ind-Pred-Env : ∀ {C E} → Type-Context C → E-Type-Context E → Set
 Ind-Pred-Env Γ Δ = (n : Pred-Name) → Ind-Pred Γ Δ n
 

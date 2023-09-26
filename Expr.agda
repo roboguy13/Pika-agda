@@ -631,16 +631,52 @@ expr-Δ-subst-1 To-SSL-Type-Layout store (Apply f-name (inj₁ arg) x) with expr
 
 expr-Δ-subst-1 To-SSL-Type-Layout store (Apply f-name (inj₂ loc) x) = inj₁ (Apply f-name (inj₂ loc) x) , Expr-Δ-subst-1-Apply-inj₂ loc _
 
-data Fs-Store : Context → Set where
-  Fs-Store-∅ : Fs-Store ∅
+data Fs-Store (h : Heap) : Context → Set where
+  Fs-Store-∅ : Fs-Store h ∅
   Fs-Store-cons : ∀ {Γ α} →
     Val α →
-    Fs-Store Γ →
-    Fs-Store (Γ ,, α)
+    Fs-Store h Γ →
+    Fs-Store h (Γ ,, α)
+  Fs-Store-cons-loc : ∀ {Γ n dom-h} →
+    (loc : Loc) →
+    Dom h dom-h →
+    loc ∈ dom-h →
+    Fs-Store h Γ →
+    Fs-Store h (Γ ,, Layout-Ty n)
 
-fs-store-lookup : ∀ {Γ α} → Fs-Store Γ → Γ ∋ α → Val α
-fs-store-lookup (Fs-Store-cons x store) Here = x
+fs-store-lookup : ∀ {h} {Γ α} → Fs-Store h Γ → Γ ∋ α → Val α ⊎ ∃[ n ] (Loc × α ≡ Layout-Ty n)
+fs-store-lookup (Fs-Store-cons x store) Here = inj₁ x
 fs-store-lookup (Fs-Store-cons x store) (There var) = fs-store-lookup store var
+fs-store-lookup (Fs-Store-cons-loc x Dom-h prf store) (There var) = fs-store-lookup store var
+fs-store-lookup (Fs-Store-cons-loc {_} {n} x Dom-h prf store) Here = inj₂ (n , x , refl)
+
+fs-store-lookup′ : ∀ {Γ α} → Fs-Store [] Γ → Γ ∋ α → Val α
+fs-store-lookup′ (Fs-Store-cons x store) Here = x
+fs-store-lookup′ (Fs-Store-cons x store) (There var) = fs-store-lookup′ store var
+fs-store-lookup′ (Fs-Store-cons-loc {_} {n} x Dom-[] () store) prf-2
+
+weaken-fs-store-[] : ∀ {h Γ} → Fs-Store [] Γ → Fs-Store h Γ
+weaken-fs-store-[] {h} {.∅} Fs-Store-∅ = Fs-Store-∅
+weaken-fs-store-[] {h} {.(_ ,, _)} (Fs-Store-cons x prf) = Fs-Store-cons x (weaken-fs-store-[] prf)
+weaken-fs-store-[] {h} {.(_ ,, Layout-Ty _)} (Fs-Store-cons-loc loc Dom-[] () prf)
+
+weaken-fs-store-inj₁ : ∀ {h h₁ h₂ Γ} →
+  h₁ ∘ h₂ == h →
+  Fs-Store h₁ Γ →
+  Fs-Store h Γ
+weaken-fs-store-inj₁ (mk-∘ _ _ _ x x₁) Fs-Store-∅ = Fs-Store-∅
+weaken-fs-store-inj₁ prf@(mk-∘ _ _ _ x x₁) (Fs-Store-cons x₂ fs-store) = Fs-Store-cons x₂ (weaken-fs-store-inj₁ prf fs-store)
+weaken-fs-store-inj₁ prf@(mk-∘ _ _ _ x x₁) (Fs-Store-cons-loc loc x₂ x₃ fs-store) =
+  let
+    z , w = x₁
+    z′ = z (Loc-Type , loc , Dom-non-null x₂ x₃ , (Val-Loc loc)) {!!}
+  in
+  Fs-Store-cons-loc loc (proj₂ Dom-exists) {!!} (weaken-fs-store-inj₁ prf fs-store)
+
+data To-SSL-Val′ : ∀ {α ssl-α} → (Val α ⊎ ∃[ n ] (Loc × α ≡ Layout-Ty n)) → SSL-Val ssl-α → Set where
+  To-SSL-Val′-Int : ∀ {i} → To-SSL-Val′ (inj₁ (Val-Int i)) (Val-Int i)
+  To-SSL-Val′-Bool : ∀ {b} → To-SSL-Val′ (inj₁ (Val-Bool b)) (Val-Bool b)
+  To-SSL-Val′-Loc : ∀ {n loc prf} → To-SSL-Val′ {Layout-Ty n} (inj₂ (n , loc , prf)) (Val-Loc loc)
 
 -- data SSL-Vars {C} (Δ : Type-Context C) : Context → Set where
 --   SSL-Vars-∅ : SSL-Vars Δ ∅
@@ -657,57 +693,110 @@ fs-store-lookup (Fs-Store-cons x store) (There var) = fs-store-lookup store var
 --     SSL-Vars→Store store (SSL-Vars-cons ssl-prf var rest) (Store-cons (store-lookup store var) rest′)
 
 
-data SSL-Vars→Fs-Store : ∀ {C} {Δ : Type-Context C} {Γ} (store : Store Δ) → SSL-Vars Δ Γ → Fs-Store Γ → Set where
-  SSL-Vars→Fs-Store-∅ : ∀ {C} {Δ : Type-Context C} {store} → SSL-Vars→Fs-Store {C} {Δ} store SSL-Vars-∅ Fs-Store-∅
-  SSL-Vars→Fs-Store-cons : ∀ {C} {Δ : Type-Context C} {Γ α} {ssl-α} {store} {ssl-prf : To-SSL-Type α ssl-α} {var : SSL-Var Δ ssl-α} {rest} {rest′}
-                             {val} →
-    SSL-Vars→Fs-Store {C} {Δ} {Γ} store rest rest′ →
-    To-SSL-Val val (store-lookup store var) →
-    (prf : To-SSL-Type α ssl-α) →
-    SSL-Vars→Fs-Store store (SSL-Vars-cons prf var rest) (Fs-Store-cons val rest′)
+-- data SSL-Vars→Fs-Store : ∀ {C} {Δ : Type-Context C} {Γ} (store : Store Δ) → SSL-Vars Δ Γ → Fs-Store ? Γ → Set where
+--   SSL-Vars→Fs-Store-∅ : ∀ {C} {Δ : Type-Context C} {store} → SSL-Vars→Fs-Store {C} {Δ} store SSL-Vars-∅ Fs-Store-∅
+--   SSL-Vars→Fs-Store-cons : ∀ {C} {Δ : Type-Context C} {Γ α} {ssl-α} {store} {ssl-prf : To-SSL-Type α ssl-α} {var : SSL-Var Δ ssl-α} {rest} {rest′}
+--                              {val} →
+--     SSL-Vars→Fs-Store {C} {Δ} {Γ} store rest rest′ →
+--     To-SSL-Val val (store-lookup store var) →
+--     (prf : To-SSL-Type α ssl-α) →
+--     SSL-Vars→Fs-Store store (SSL-Vars-cons prf var rest) (Fs-Store-cons val rest′)
 
-data Fs-Store-app : ∀ {Γ Γ′ Γ′′} → Fs-Store Γ → Fs-Store Γ′ → Fs-Store Γ′′ → Set where
-  Fs-Store-app-∅ : ∀ {Γ} {store : Fs-Store Γ} → Fs-Store-app Fs-Store-∅ store store
-  Fs-Store-app-cons : ∀ {Γ Γ′ Γ′′} {α}
-                        {store-1 : Fs-Store Γ} {store-2 : Fs-Store Γ′} {store′ : Fs-Store Γ′′} {val : Val α} →
-    Fs-Store-app store-1 store-2 store′ →
-    Fs-Store-app (Fs-Store-cons val store-1) store-2 (Fs-Store-cons val store′)
+-- SSL-Vars→Fs-Store-exists : ∀ {C} {Δ : Type-Context C} {Γ} (store : Store Δ) → (vars : SSL-Vars Δ Γ) → ∃[ fs-store ] SSL-Vars→Fs-Store store vars fs-store
+-- SSL-Vars→Fs-Store-exists store SSL-Vars-∅ = Fs-Store-∅ , SSL-Vars→Fs-Store-∅
+-- SSL-Vars→Fs-Store-exists store (SSL-Vars-cons x x₁ vars)
+--   with store-lookup store x₁ in eq
+-- SSL-Vars→Fs-Store-exists store (SSL-Vars-cons x x₁ vars) | Val-Loc x₂ =
+--   let
+--     vars′ , prf′ = SSL-Vars→Fs-Store-exists store vars
+--   in
+--   Fs-Store-cons {!!} {!!} , SSL-Vars→Fs-Store-cons prf′ {!!} x
+-- SSL-Vars→Fs-Store-exists store (SSL-Vars-cons x x₁ vars) | Val-Int x₂ = {!!}
+-- SSL-Vars→Fs-Store-exists store (SSL-Vars-cons x x₁ vars) | Val-Bool x₂ = {!!}
 
-data To-SSL-Context : ∀ {C} → Context → Type-Context C → Set where
-  To-SSL-Context-Z : To-SSL-Context ∅ ε
-  To-SSL-Context-S : ∀ {C} {Γ α ssl-α Δ} →
-    To-SSL-Type α ssl-α →
-    To-SSL-Context {C} Γ Δ →
-    To-SSL-Context (Γ ,, α) (Δ ,, ssl-α)
+-- data Fs-Store-app : ∀ {Γ Γ′ Γ′′} → Fs-Store Γ → Fs-Store Γ′ → Fs-Store Γ′′ → Set where
+--   Fs-Store-app-∅ : ∀ {Γ} {store : Fs-Store Γ} → Fs-Store-app Fs-Store-∅ store store
+--   Fs-Store-app-cons : ∀ {Γ Γ′ Γ′′} {α}
+--                         {store-1 : Fs-Store Γ} {store-2 : Fs-Store Γ′} {store′ : Fs-Store Γ′′} {val : Val α} →
+--     Fs-Store-app store-1 store-2 store′ →
+--     Fs-Store-app (Fs-Store-cons val store-1) store-2 (Fs-Store-cons val store′)
 
-data To-Store : ∀ {C} {Δ : Type-Context C} {Γ} → Fs-Store Γ → Store Δ → Set where
-  To-Store-∅ : To-Store Fs-Store-∅ Store-[]
-  To-Store-cons : ∀ {C} {Δ : Type-Context C} {Γ α ssl-α}
-                    {val : Val α}
-                    {ssl-val : SSL-Val ssl-α}
-                    {fs-store : Fs-Store Γ}
-                    {store : Store Δ} →
-    To-SSL-Type α ssl-α →
-    To-SSL-Val val ssl-val →
-    To-Store fs-store store →
-    To-Store (Fs-Store-cons val fs-store) (Store-cons ssl-val store)
+-- Args→Fs-Store : ∀ {C} {Δ : Type-Context C} {Γ₀ Γ} →
+--   Fs-Store Γ₀ →
+--   Store Δ →
+--   (Args Δ Γ₀ Γ) →
+--   Fs-Store Γ
+-- Args→Fs-Store fs-store store Args-∅ = Fs-Store-∅
+-- Args→Fs-Store fs-store store (Args-cons x (inj₂ (fst , mk-Is-Layout-Type)) args) =
+--   -- let
+--   --   z = 
+--   -- in
+--   Fs-Store-cons {!!} (Args→Fs-Store fs-store store args)
+-- Args→Fs-Store fs-store store (Args-cons x (inj₁ x₁) args) = {!!}
 
--- to-SSL-Context : Context → ∃[ C ] Type-Context C
--- to-SSL-Context ∅ = Z , ε
--- to-SSL-Context (Γ ,, x) with to-SSL-Context Γ
--- ... | n , Δ = S n , ({!!} ,, to-SSL
+-- close-Args : ∀ {C} {Δ : Type-Context C} {Γ₀ Γ} →
+--   Fs-Store Γ₀ →
+--   Store Δ →
+--   Args Δ Γ₀ Γ →
+--   Args ε ∅ Γ
 
--- Fs-Store→Store : Fs-Store Γ → 
+-- close-Expr :  ∀ {C} {Δ : Type-Context C} {Γ α} →
+--   Fs-Store Γ →
+--   Store Δ →
+--   Expr Δ Γ α →
+--   Expr ε ∅ α
+-- close-Expr fs-store store (V x) = Lit (fs-store-lookup fs-store x)
+-- close-Expr fs-store store (Lit x) = Lit x
+-- close-Expr fs-store store (SSL-V x x₁) = {!!}
+-- close-Expr fs-store store (Add e e₁) = Add (close-Expr fs-store store e₁) (close-Expr fs-store store e₁)
+-- close-Expr fs-store store (Sub e e₁) = Sub (close-Expr fs-store store e₁) (close-Expr fs-store store e₁)
+-- close-Expr fs-store store (And e e₁) = And (close-Expr fs-store store e₁) (close-Expr fs-store store e₁)
+-- close-Expr fs-store store (Not e) = Not (close-Expr fs-store store e)
+-- close-Expr fs-store store (Equal e e₁) = Equal (close-Expr fs-store store e₁) (close-Expr fs-store store e₁)
+-- close-Expr fs-store store (Lower constr ssl-param x x₁ x₂ x₃) = Lower constr ssl-param x (close-Args fs-store store x₁) x₂ x₃
+-- close-Expr fs-store store (Apply f-name (inj₁ x₁) x) = Apply f-name (inj₁ (close-Expr fs-store store x₁)) x
+-- close-Expr fs-store store (Apply f-name (inj₂ y) x) = Apply f-name (inj₂ y) x
 
-Lit-has-Base-Type : ∀ {C} {Δ : Type-Context C} {Γ} {α} (x : Val α) (e : Expr Δ Γ α) → e ≡ Lit x → Base-Type α
-Lit-has-Base-Type (Val-Int x) .(Lit (Val-Int x)) refl = Base-Type-Int
-Lit-has-Base-Type (Val-Bool x) .(Lit (Val-Bool x)) refl = Base-Type-Bool
+-- close-Args fs-store store Args-∅ = Args-∅
+-- close-Args fs-store store (Args-cons x (inj₁ x₁) args) = Args-cons x (inj₁ {!!}) (close-Args fs-store store args)
+-- close-Args fs-store store (Args-cons x (inj₂ y) args) =
+--   Args-cons x (inj₂ y) (close-Args fs-store store args)
 
-Base-Type-to-SSL : ∀ {α} → Base-Type α → ∃[ ssl-α ] To-SSL-Type α ssl-α
-Base-Type-to-SSL Base-Type-Int = Int-Type , To-SSL-Type-Int
-Base-Type-to-SSL Base-Type-Bool = Bool-Type , To-SSL-Type-Bool
+-- data To-SSL-Context : ∀ {C} → Context → Type-Context C → Set where
+--   To-SSL-Context-Z : To-SSL-Context ∅ ε
+--   To-SSL-Context-S : ∀ {C} {Γ α ssl-α Δ} →
+--     To-SSL-Type α ssl-α →
+--     To-SSL-Context {C} Γ Δ →
+--     To-SSL-Context (Γ ,, α) (Δ ,, ssl-α)
 
-to-SSL-Type-unique : ∀ {α ssl-α-1 ssl-α-2} → To-SSL-Type α ssl-α-1 → To-SSL-Type α ssl-α-2 → ssl-α-1 ≡ ssl-α-2
-to-SSL-Type-unique To-SSL-Type-Int To-SSL-Type-Int = refl
-to-SSL-Type-unique To-SSL-Type-Bool To-SSL-Type-Bool = refl
-to-SSL-Type-unique To-SSL-Type-Layout To-SSL-Type-Layout = refl
+-- data To-Store : ∀ {C} {Δ : Type-Context C} {Γ} → Fs-Store Γ → Store Δ → Set where
+--   To-Store-∅ : To-Store Fs-Store-∅ Store-[]
+--   To-Store-cons : ∀ {C} {Δ : Type-Context C} {Γ α ssl-α}
+--                     {val : Val α}
+--                     {ssl-val : SSL-Val ssl-α}
+--                     {fs-store : Fs-Store Γ}
+--                     {store : Store Δ} →
+--     To-SSL-Type α ssl-α →
+--     To-SSL-Val val ssl-val →
+--     To-Store fs-store store →
+--     To-Store (Fs-Store-cons val fs-store) (Store-cons ssl-val store)
+
+-- -- to-SSL-Context : Context → ∃[ C ] Type-Context C
+-- -- to-SSL-Context ∅ = Z , ε
+-- -- to-SSL-Context (Γ ,, x) with to-SSL-Context Γ
+-- -- ... | n , Δ = S n , ({!!} ,, to-SSL
+
+-- -- Fs-Store→Store : Fs-Store Γ → 
+
+-- Lit-has-Base-Type : ∀ {C} {Δ : Type-Context C} {Γ} {α} (x : Val α) (e : Expr Δ Γ α) → e ≡ Lit x → Base-Type α
+-- Lit-has-Base-Type (Val-Int x) .(Lit (Val-Int x)) refl = Base-Type-Int
+-- Lit-has-Base-Type (Val-Bool x) .(Lit (Val-Bool x)) refl = Base-Type-Bool
+
+-- Base-Type-to-SSL : ∀ {α} → Base-Type α → ∃[ ssl-α ] To-SSL-Type α ssl-α
+-- Base-Type-to-SSL Base-Type-Int = Int-Type , To-SSL-Type-Int
+-- Base-Type-to-SSL Base-Type-Bool = Bool-Type , To-SSL-Type-Bool
+
+-- to-SSL-Type-unique : ∀ {α ssl-α-1 ssl-α-2} → To-SSL-Type α ssl-α-1 → To-SSL-Type α ssl-α-2 → ssl-α-1 ≡ ssl-α-2
+-- to-SSL-Type-unique To-SSL-Type-Int To-SSL-Type-Int = refl
+-- to-SSL-Type-unique To-SSL-Type-Bool To-SSL-Type-Bool = refl
+-- to-SSL-Type-unique To-SSL-Type-Layout To-SSL-Type-Layout = refl
